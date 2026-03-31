@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Alertas enviadas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  </head>
+  <body class="bg-light">
+    {% include 'navbar.html' %}
+    <div class="container py-5">
+      <h1 class="mb-4">Alertas enviadas</h1>
+
+      {% if target %}
+        <p>
+          Chat objetivo configurado: <strong>{{ target }}</strong>
+        </p>
+      {% endif %}
+
+      {% if not alerts %}
+        <div class="alert alert-info">
+          No hay alertas registradas (items con <code>tg_message_id</code>).
+        </div>
+      {% else %}
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nivel</th>
+              <th>Título</th>
+              <th>tg_message_id</th>
+              <th>Enlace</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in alerts %}
+              <tr>
+                <td>{{ a.id }}</td>
+                <td>{{ a.level }}</td>
+                <td>{{ a.title }}</td>
+                <td>{{ a.tg_message_id }}</td>
+                <td>
+                  {% if username and a.tg_message_id %}
+                    <a href="https://t.me/{{ username }}/{{ a.tg_message_id }}" target="_blank">Abrir en Telegram</a>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+
+      <a href="/config" class="btn btn-link">Volver a configuración</a>
+    </div>
+  </body>
+</html>

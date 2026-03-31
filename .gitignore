@@ -1,0 +1,11 @@
+__pycache__/
+.venv/
+.env
+duplicates.log
+.tmp_searches/
+.tmp_states/
+telegram_offset.txt
+transformers/
+cache_dir/
+pa_feed.db
+newsapi_request_stats.json

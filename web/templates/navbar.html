@@ -1,0 +1,21 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand" href="/">SPAP</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link {% if request.path == '/' %}active{% endif %}" href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Feed</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.path.startswith('/config') %}active{% endif %}" href="/config" {% if request.path.startswith('/config') %}aria-current="page"{% endif %}>Configuración</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.path.startswith('/alerts') %}active{% endif %}" href="/alerts" {% if request.path.startswith('/alerts') %}aria-current="page"{% endif %}>Alertas</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Configuración del Monitor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  </head>
+  <body class="bg-light">
+    {% include 'navbar.html' %}
+    <div class="container py-5">
+      <h1 class="mb-4">Configuración del Monitor</h1>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, msg in messages %}
+            <div class="alert alert-{{ category }}" role="alert">{{ msg }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="post" action="/config" class="mb-4">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-body">
+                <h5 class="card-title">General</h5>
+                <p class="text-muted small">Selecciona las fuentes a consultar y ajusta frecuencia y volumen.</p>
+                <div class="row">
+                  <div class="col-md-6">
+                    <label class="form-label">Fuentes</label>
+                    <div class="d-flex flex-wrap gap-2">
+                      {% for s in sources %}
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources" id="src_{{ s }}" {{ 'checked' if s in params.sources else '' }}>
+                        <label class="form-check-label" for="src_{{s}}">{{s}}</label>
+                      </div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Límite por fuente</label>
+                    <input type="number" name="limit" class="form-control" value="{{ params.limit }}" placeholder="Máx. resultados por fuente">
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label">Intervalo (min)</label>
+                    <input type="number" name="interval_minutes" class="form-control" value="{{ params.interval_minutes }}" placeholder="Cada cuántos minutos buscar">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-body">
+                <h5 class="card-title">Ubicación</h5>
+                <p class="text-muted small">Opcional: limita búsquedas a una ubicación administrativa.</p>
+                <div class="row gy-2">
+                  <div class="col-md-4">
+                    <label class="form-label">Estado</label>
+                    <input type="text" name="location_state" class="form-control" value="{{ params.location.state if params.location is defined else params.get('location',{}).get('state','') }}" placeholder="Ej: Ciudad de México">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">País</label>
+                    <input type="text" name="location_country" class="form-control" value="{{ params.location.country if params.location is defined else params.get('location',{}).get('country','') }}" placeholder="Ej: México">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Municipio</label>
+                    <input type="text" name="location_municipality" class="form-control" value="{{ params.location.municipality if params.location is defined else params.get('location',{}).get('municipality','') }}" placeholder="Ej: Benito Juárez">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Colonia</label>
+                    <input type="text" name="location_colony" class="form-control" value="{{ params.location.colony if params.location is defined else params.get('location',{}).get('colony','') }}" placeholder="Opcional">
+                  </div>
+                </div>
+                <div class="row mt-2">
+                  <div class="col-md-6 form-check">
+                    <input class="form-check-input" type="checkbox" name="use_location_filter" id="use_location_filter" value="1" {% if params.get('use_location_filter') %}checked{% endif %}>
+                    <label class="form-check-label" for="use_location_filter">Aplicar filtro por ubicación</label>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Radio (km)</label>
+                    <input type="number" step="1" min="0" name="location_radius" class="form-control" value="{{ params.get('location_radius','') }}" placeholder="Ej: 50">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card">
+              <div class="card-body">
+                <h5 class="card-title">Telegram</h5>
+                <p class="text-muted small">Configura notificaciones automáticas (opcional).</p>
+                <div class="mb-2">
+                  <label class="form-label">Chat objetivo Telegram</label>
+                  <input type="text" name="telegram_target_chat" class="form-control" value="{{ params.telegram_target_chat }}" placeholder="@canal_o_ID, t.me/usuario">
+                </div>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" value="1" name="telegram_alerts" id="telegram_alerts" {{ 'checked' if params.telegram_alerts else '' }}>
+                  <label class="form-check-label" for="telegram_alerts">Enviar alertas (CRITICO)</label>
+                </div>
+                <div>
+                  <button formaction="/config/send_test_alert" formmethod="post" class="btn btn-outline-secondary">Enviar prueba Telegram</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        <div class="card mb-3">
+          {% set newsapi_opts = params.get('source_options', {}) .get('newsapi', {}) %}
+          <div class="card-body">
+            <h5 class="card-title">NewsAPI (ajustes)</h5>
+            <div class="mb-2">
+              <label class="form-label">Dominios permitidos (separados por comas)</label>
+              <input type="text" name="newsapi_domains" class="form-control" placeholder="ej: df.cl, elpais.com" value="{{ newsapi_opts.get('domains')|join(', ') if newsapi_opts.get('domains') else '' }}">
+            </div>
+            <div class="mb-2 form-check">
+              <input class="form-check-input" type="checkbox" name="newsapi_qInTitle" id="newsapi_qInTitle" value="1" {% if newsapi_opts.get('qInTitle') %}checked{% endif %}>
+              <label class="form-check-label" for="newsapi_qInTitle">Buscar solo en título (qInTitle)</label>
+            </div>
+            <div class="mb-2 row">
+              <div class="col-md-4">
+                <label class="form-label">Idioma</label>
+                <select name="newsapi_language" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="es" {% if newsapi_opts.get('language')=='es' %}selected{% endif %}>Español (es)</option>
+                  <option value="en" {% if newsapi_opts.get('language')=='en' %}selected{% endif %}>Inglés (en)</option>
+                  <option value="pt" {% if newsapi_opts.get('language')=='pt' %}selected{% endif %}>Portugués (pt)</option>
+                  <option value="fr" {% if newsapi_opts.get('language')=='fr' %}selected{% endif %}>Francés (fr)</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Desde (fecha)</label>
+                <input type="date" name="newsapi_from_date" class="form-control" value="{{ newsapi_opts.get('from_date','') }}">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Hasta (fecha)</label>
+                <input type="date" name="newsapi_to_date" class="form-control" value="{{ newsapi_opts.get('to_date','') }}">
+              </div>
+            </div>
+            <div class="mb-2 row">
+              <div class="col-md-3">
+                <label class="form-label">Tamaño página (page_size)</label>
+                <input type="number" name="newsapi_page_size" class="form-control" min="1" max="100" value="{{ newsapi_opts.get('page_size','') }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Ordenar por</label>
+                <select name="newsapi_sort_by" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="relevancy" {% if newsapi_opts.get('sort_by')=='relevancy' %}selected{% endif %}>Relevancia</option>
+                  <option value="popularity" {% if newsapi_opts.get('sort_by')=='popularity' %}selected{% endif %}>Popularidad</option>
+                  <option value="publishedAt" {% if newsapi_opts.get('sort_by')=='publishedAt' %}selected{% endif %}>Fecha</option>
+                </select>
+              </div>
+            </div>
+            <small class="text-muted">Si no rellenás nada, se usarán los valores predeterminados del adaptador.</small>
+          </div>
+        </div>
+        <h4>Configuración del Clasificador (solo palabras clave)</h4>
+        <p class="text-muted">Introduce las palabras clave para cada nivel; separa por saltos de línea o comas.</p>
+        <div class="mb-3">
+          <label class="form-label">Palabras clave (Alta)</label>
+          <textarea name="classifier_high_keywords" class="form-control" rows="3">{{ classifier.get('high',{}).get('keywords')|join('\n') if classifier.get('high') else '' }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Palabras clave (Media)</label>
+          <textarea name="classifier_medium_keywords" class="form-control" rows="3">{{ classifier.get('medium',{}).get('keywords')|join('\n') if classifier.get('medium') else '' }}</textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Palabras clave (Baja)</label>
+          <textarea name="classifier_low_keywords" class="form-control" rows="3">{{ classifier.get('low',{}).get('keywords')|join('\n') if classifier.get('low') else '' }}</textarea>
+        </div>
+
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Contexto y filtros</h5>
+              <p class="text-muted small">Ajusta palabras que ayuden o eviten coincidencias irrelevantes.</p>
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="use_context_keywords" id="use_context_keywords" value="1" {% if params.get('use_context_keywords') %}checked{% endif %}>
+                <label class="form-check-label" for="use_context_keywords">Usar palabras de contexto además del clasificador</label>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Palabras de contexto (incluir) — una por línea</label>
+                <textarea name="context_keywords" class="form-control" rows="3">{{ params.get('context_keywords')|join('\n') if params.get('context_keywords') else '' }}</textarea>
+                <div class="form-text">Ej: 'incendio' (sin comillas). Se aplican como OR a las consultas del clasificador.</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Palabras a excluir — una por línea</label>
+                <textarea name="exclude_keywords" class="form-control" rows="2">{{ params.get('exclude_keywords')|join('\n') if params.get('exclude_keywords') else '' }}</textarea>
+                <div class="form-text">Si alguna aparece en título o resumen, la noticia se ignorará.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary">Guardar configuración</button>
+        <button formaction="/config/send_test_alert" formmethod="post" class="btn btn-outline-secondary ms-2">Enviar prueba Telegram</button>
+        <a href="/" class="btn btn-link">Volver al feed</a>
+      </form>
+
+    </div>
+  </body>
+</html>

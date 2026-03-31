@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buscador de Noticias</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  </head>
+  <body class="bg-light">
+    {% include 'navbar.html' %}
+    <div class="container py-5">
+      <h1 class="mb-4">Buscador de Noticias</h1>
+
+      <h2 class="mt-5">Feed en tiempo real</h2>
+      <div class="d-flex gap-2 mb-3">
+        <a href="/config" class="btn btn-link">Ir a configuración</a>
+        <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#filterModal">Filtros</button>
+      </div>
+
+      <!-- Modal de filtros -->
+      <div class="modal fade" id="filterModal" tabindex="-1" aria-labelledby="filterModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="filterModalLabel">Filtros de búsqueda</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label">Buscar</label>
+                  <input id="filter-search" class="form-control" placeholder="Título o resumen..." />
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Nivel (nivel de prioridad)</label>
+                  <div>
+                    <div class="form-check form-check-inline">
+                      <input class="form-check-input" type="checkbox" id="lvl_high" value="high" /><label class="form-check-label" for="lvl_high">Alta</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                      <input class="form-check-input" type="checkbox" id="lvl_medium" value="medium" /><label class="form-check-label" for="lvl_medium">Media</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                      <input class="form-check-input" type="checkbox" id="lvl_low" value="low" /><label class="form-check-label" for="lvl_low">Baja</label>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Origen (fuente de información)</label>
+                  <select id="filter-origin" class="form-select">
+                    <option value="all">Todos</option>
+                    <option value="monitor">Monitor</option>
+                    <option value="telegram_manual">Telegram (manual)</option>
+                    <option value="telegram_search">Telegram (búsqueda)</option>
+                    <option value="desconocido">Desconocido</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Fuente</label>
+                  <input id="filter-source" class="form-control" placeholder="Fuente (ej. NewsAPI, Reddit...)" />
+                </div>
+
+                <div class="col-md-2 text-end">
+                  <button id="filter-apply" class="btn btn-primary">Aplicar</button>
+                  <button id="filter-reset" class="btn btn-link">Reiniciar</button>
+                </div>
+              </div>
+              <div class="row g-2 mt-2">
+                <div class="col">
+                  <label class="form-label">Publicado</label>
+                  <select id="filter-pub-range" class="form-select">
+                    <option value="all">Todos</option>
+                    <option value="today">Hoy</option>
+                    <option value="week">Esta semana</option>
+                    <option value="month">Este mes</option>
+                    <option value="custom">Rango personalizado</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label class="form-label">Publicado desde</label>
+                  <input id="filter-pub-from" type="date" class="form-control" style="display:none" />
+                </div>
+                <div class="col">
+                  <label class="form-label">Publicado hasta</label>
+                  <input id="filter-pub-to" type="date" class="form-control" style="display:none" />
+                </div>
+              </div>
+
+              <div class="row mt-2">
+                <div class="col">
+                  <label class="form-label">Extraído</label>
+                  <select id="filter-ext-range" class="form-select">
+                    <option value="all">Todos</option>
+                    <option value="today">Hoy</option>
+                    <option value="week">Esta semana</option>
+                    <option value="month">Este mes</option>
+                    <option value="custom">Rango personalizado</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label class="form-label">Extraído desde</label>
+                  <input id="filter-ext-from" type="date" class="form-control" style="display:none" />
+                </div>
+                <div class="col">
+                  <label class="form-label">Extraído hasta</label>
+                  <input id="filter-ext-to" type="date" class="form-control" style="display:none" />
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="live-feed" class="mb-3">
+        <div class="list-group" id="live-list">
+          <!-- items serán insertados por JS -->
+        </div>
+        <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Paginación">
+          <div>
+            <button id="pagination-prev" class="btn btn-outline-secondary btn-sm">Anterior</button>
+            <button id="pagination-next" class="btn btn-outline-secondary btn-sm">Siguiente</button>
+          </div>
+          <div class="text-muted small" id="pagination-info">Página 1</div>
+        </nav>
+      </div>
+
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+      <script>
+        const liveList = document.getElementById('live-list')
+        let allItems = []
+        
+        function zeroPad(n) {
+          return String(n).padStart(2, '0')
+        }
+        function formatDate(iso) {
+          if (!iso) return ''
+          try {
+            const d = new Date(iso)
+            if (isNaN(d.getTime())) return ''
+            const hh = zeroPad(d.getHours())
+            const mm = zeroPad(d.getMinutes())
+            const dd = zeroPad(d.getDate())
+            const mo = zeroPad(d.getMonth() + 1)
+            const yy = d.getFullYear()
+            return `${hh}:${mm} - ${dd}/${mo}/${yy}`
+          } catch (e) {
+            return ''
+          }
+        }
+        
+        function renderItem(it) {
+          const el = document.createElement('div')
+          el.className = 'list-group-item'
+          const header = document.createElement('div')
+          header.className = 'd-flex w-100 justify-content-between'
+          const titleWrap = document.createElement('h5')
+          titleWrap.className = 'mb-1'
+          const emoji = document.createTextNode((it.emoji || '') + ' ')
+          titleWrap.appendChild(emoji)
+          if (it.url) {
+            const a = document.createElement('a')
+            a.href = it.url
+            a.target = '_blank'
+            a.rel = 'noopener noreferrer'
+            a.textContent = it.title || '(sin título)'
+            titleWrap.appendChild(a)
+          } else {
+            titleWrap.appendChild(document.createTextNode(it.title || '(sin título)'))
+          }
+          const metaSmall = document.createElement('small')
+          metaSmall.textContent = formatDate(it.published_at) || ''
+          header.appendChild(titleWrap)
+          header.appendChild(metaSmall)
+        
+          const sub = document.createElement('p')
+          sub.className = 'mb-1 text-muted'
+          const origin = it.origin || (it.meta && it.meta.method) || 'desconocido'
+          const extracted = formatDate(it.extracted_at) || ''
+          const fuente = it.source || ''
+          sub.textContent = `Fuente: ${fuente} • Nivel: ${it.level} • Origen: ${origin} • Extraído: ${extracted}`
+          el.appendChild(header)
+          el.appendChild(sub)
+          return el
+        }
+        
+        // cargar inicial (mostrar todos)
+        fetch('/live')
+          .then((r) => r.json())
+          .then((items) => {
+            allItems = items || []
+            applyFilters()
+          })
+          .catch(() => {})
+        
+        // conectar SSE
+        if (typeof EventSource !== 'undefined') {
+          const es = new EventSource('/stream')
+          es.onmessage = function (evt) {
+            try {
+              const items = JSON.parse(evt.data)
+              // actualizar lista completa y aplicar filtros
+              allItems = items || []
+              applyFilters()
+            } catch (e) {
+              console.error(e)
+            }
+          }
+        }
+        
+        // --- filtros y paginación cliente ----------------------------------
+        function parseDateInput(v) {
+          return v ? new Date(v) : null
+        }
+        function toDateOnly(d) {
+          if (!d) return null
+          return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+        }
+        
+        function computePresetRange(kind) {
+          const now = new Date()
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          if (kind === 'today') {
+            const to = new Date(todayStart)
+            to.setHours(23, 59, 59, 999)
+            return { from: todayStart, to }
+          }
+          if (kind === 'week') {
+            // week starting Monday
+            const day = now.getDay() // 0=Sun,1=Mon...
+            const diffToMon = day === 0 ? 6 : day - 1
+            const mon = new Date(todayStart)
+            mon.setDate(mon.getDate() - diffToMon)
+            const to = new Date()
+            to.setHours(23, 59, 59, 999)
+            return { from: mon, to }
+          }
+          if (kind === 'month') {
+            const first = new Date(now.getFullYear(), now.getMonth(), 1)
+            const to = new Date()
+            to.setHours(23, 59, 59, 999)
+            return { from: first, to }
+          }
+          return { from: null, to: null }
+        }
+        
+        function handleRangeVisibility() {
+          const pubRange = document.getElementById('filter-pub-range').value
+          const pubFrom = document.getElementById('filter-pub-from')
+          const pubTo = document.getElementById('filter-pub-to')
+          if (pubRange === 'custom') {
+            pubFrom.style.display = ''
+            pubTo.style.display = ''
+          } else {
+            pubFrom.style.display = 'none'
+            pubTo.style.display = 'none'
+          }
+          const extRange = document.getElementById('filter-ext-range').value
+          const extFrom = document.getElementById('filter-ext-from')
+          const extTo = document.getElementById('filter-ext-to')
+          if (extRange === 'custom') {
+            extFrom.style.display = ''
+            extTo.style.display = ''
+          } else {
+            extFrom.style.display = 'none'
+            extTo.style.display = 'none'
+          }
+        }
+        
+        document.getElementById('filter-pub-range').addEventListener('change', handleRangeVisibility)
+        document.getElementById('filter-ext-range').addEventListener('change', handleRangeVisibility)
+        
+        // initialize visibility
+        handleRangeVisibility()
+        
+        const pageSize = 20
+        let currentPage = 1
+        let filteredItems = []
+        
+        function renderPage() {
+          const total = filteredItems.length
+          const totalPages = Math.max(1, Math.ceil(total / pageSize))
+          if (currentPage > totalPages) currentPage = totalPages
+          if (currentPage < 1) currentPage = 1
+          const start = (currentPage - 1) * pageSize
+          const end = start + pageSize
+          const pageItems = filteredItems.slice(start, end)
+        
+          liveList.innerHTML = ''
+          pageItems.forEach((it) => liveList.appendChild(renderItem(it)))
+        
+          document.getElementById('pagination-info').textContent = `Página ${currentPage} de ${totalPages} (${total} resultados)`
+          document.getElementById('pagination-prev').disabled = currentPage <= 1
+          document.getElementById('pagination-next').disabled = currentPage >= totalPages
+        }
+        
+        document.getElementById('pagination-prev').addEventListener('click', (e) => {
+          e.preventDefault()
+          if (currentPage > 1) {
+            currentPage--
+            renderPage()
+          }
+        })
+        document.getElementById('pagination-next').addEventListener('click', (e) => {
+          e.preventDefault()
+          const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize))
+          if (currentPage < totalPages) {
+            currentPage++
+            renderPage()
+          }
+        })
+        
+        function applyFilters() {
+          currentPage = 1
+          const q = (document.getElementById('filter-search').value || '').toLowerCase().trim()
+          const lvlHigh = document.getElementById('lvl_high').checked
+          const lvlMed = document.getElementById('lvl_medium').checked
+          const lvlLow = document.getElementById('lvl_low').checked
+          const origin = document.getElementById('filter-origin').value
+          const sourceQ = (document.getElementById('filter-source').value || '').toLowerCase().trim()
+          // handle presets
+          let pubFrom = null,
+            pubTo = null
+          const pubRange = document.getElementById('filter-pub-range').value
+          if (pubRange === 'custom') {
+            pubFrom = parseDateInput(document.getElementById('filter-pub-from').value)
+            pubTo = parseDateInput(document.getElementById('filter-pub-to').value)
+          } else if (pubRange !== 'all') {
+            const r = computePresetRange(pubRange)
+            pubFrom = r.from
+            pubTo = r.to
+          }
+        
+          let extFrom = null,
+            extTo = null
+          const extRange = document.getElementById('filter-ext-range').value
+          if (extRange === 'custom') {
+            extFrom = parseDateInput(document.getElementById('filter-ext-from').value)
+            extTo = parseDateInput(document.getElementById('filter-ext-to').value)
+          } else if (extRange !== 'all') {
+            const r = computePresetRange(extRange)
+            extFrom = r.from
+            extTo = r.to
+          }
+        
+          const levelFilterActive = lvlHigh || lvlMed || lvlLow
+        
+          const filtered = allItems.filter((it) => {
+            // search
+            if (q) {
+              const inTitle = (it.title || '').toLowerCase().includes(q)
+              const inSummary = (it.summary || '').toLowerCase().includes(q)
+              if (!inTitle && !inSummary) return false
+            }
+            // level (normalize values produced by different parts of the app)
+            if (levelFilterActive) {
+              const rawLvl = (it.level || '').toLowerCase()
+              let lvlNorm = rawLvl
+              try {
+                if (rawLvl.includes('crit')) lvlNorm = 'high'
+                else if (rawLvl.includes('med')) lvlNorm = 'medium'
+                else if (rawLvl.includes('baj') || rawLvl.includes('low')) lvlNorm = 'low'
+              } catch (e) {
+                lvlNorm = rawLvl
+              }
+              if (lvlNorm === 'high' && !lvlHigh) return false
+              if (lvlNorm === 'medium' && !lvlMed) return false
+              if (lvlNorm === 'low' && !lvlLow) return false
+            }
+            // origin
+            if (origin && origin !== 'all') {
+              const o = it.origin || (it.meta && it.meta.method) || 'desconocido'
+              if (origin === 'desconocido') {
+                if (o !== 'desconocido') return false
+              } else if (o !== origin) return false
+            }
+            // source and channel filters (separated)
+            if (sourceQ) {
+              const src = (it.source || '').toLowerCase()
+              if (!src.includes(sourceQ)) return false
+            }
+        
+            // published range
+            if (pubFrom || pubTo) {
+              const pub = it.published_at ? new Date(it.published_at) : null
+              if (pub) {
+                if (pubFrom) {
+                  if (pub < toDateOnly(pubFrom)) return false
+                }
+                if (pubTo) {
+                  const end = new Date(toDateOnly(pubTo))
+                  end.setHours(23, 59, 59, 999)
+                  if (pub > end) return false
+                }
+              }
+            }
+            // extracted range
+            if (extFrom || extTo) {
+              const ext = it.extracted_at ? new Date(it.extracted_at) : null
+              if (ext) {
+                if (extFrom) {
+                  if (ext < toDateOnly(extFrom)) return false
+                }
+                if (extTo) {
+                  const end = new Date(toDateOnly(extTo))
+                  end.setHours(23, 59, 59, 999)
+                  if (ext > end) return false
+                }
+              }
+            }
+            return true
+          })
+        
+          // asignar y renderizar la primera página
+          filteredItems = filtered
+          renderPage()
+        }
+        
+        document.getElementById('filter-apply').addEventListener('click', (e) => {
+          e.preventDefault()
+          applyFilters()
+        })
+        document.getElementById('filter-reset').addEventListener('click', (e) => {
+          e.preventDefault()
+          document.getElementById('filter-search').value = ''
+          document.getElementById('lvl_high').checked = false
+          document.getElementById('lvl_medium').checked = false
+          document.getElementById('lvl_low').checked = false
+          document.getElementById('filter-origin').value = 'all'
+          document.getElementById('filter-source').value = ''
+          document.getElementById('filter-pub-from').value = ''
+          document.getElementById('filter-pub-to').value = ''
+          document.getElementById('filter-ext-from').value = ''
+          document.getElementById('filter-ext-to').value = ''
+          applyFilters()
+        })
+      </script>
+    </div>
+  </body>
+</html>
