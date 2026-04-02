@@ -484,11 +484,11 @@ def send_start_menu(chat_id: str):
     keyboard = {
         "inline_keyboard": [
             [
-                {"text": "🔎 Buscar", "callback_data": "cmd:search"},
-                {"text": "➕ Agregar noticia", "callback_data": "cmd:addnews"},
+                {"text": "Buscar", "callback_data": "cmd:search"},
+                {"text": "Agregar noticia", "callback_data": "cmd:addnews"},
             ],
             [
-                {"text": "ℹ️ Ayuda", "callback_data": "cmd:help"}
+                {"text": "Ayuda", "callback_data": "cmd:help"}
             ],
         ]
     }
