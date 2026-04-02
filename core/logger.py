@@ -63,7 +63,8 @@ def log_exc(message: str, exc: Optional[BaseException] = None) -> None:
                 pass
 
         if exc is not None:
-            traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stdout)
+            traceback.print_exception(
+                type(exc), exc, exc.__traceback__, file=sys.stdout)
         else:
             traceback.print_stack(file=sys.stdout)
     except Exception:

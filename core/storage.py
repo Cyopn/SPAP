@@ -137,7 +137,8 @@ def _ensure_schema():
                 }
                 cur.execute(
                     "UPDATE configs SET value = ?, updated_at = ? WHERE key = ?",
-                    (json.dumps(migrated_cfg, ensure_ascii=False), now_mx_iso(), "classifier_config"),
+                    (json.dumps(migrated_cfg, ensure_ascii=False),
+                     now_mx_iso(), "classifier_config"),
                 )
         except Exception:
             pass
@@ -467,7 +468,8 @@ def append_item(
         created_at = now_mx_iso()
         cur.execute(
             "INSERT INTO items (created_at, source, title, url, summary, published_at, keyword, extracted_at, level, emoji, color, origin, ingested_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (created_at, src, t, u, s, p, k, extracted, lvl, emj, col, orig, ingested_by_norm),
+            (created_at, src, t, u, s, p, k, extracted,
+             lvl, emj, col, orig, ingested_by_norm),
         )
         conn.commit()
         return int(cur.lastrowid or 0)

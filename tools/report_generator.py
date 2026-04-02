@@ -345,7 +345,8 @@ def _export_pdf_report(
     story.append(Paragraph(filter_line, sub_style))
     story.append(Spacer(1, 10))
 
-    table_data = [["Fecha", "Nivel", "Fuente", "Titulo", "Vistas", "Compartidos"]]
+    table_data = [["Fecha", "Nivel", "Fuente",
+                   "Titulo", "Vistas", "Compartidos"]]
     for row in rows:
         title_txt = str(row.get("title") or "").strip() or "(sin titulo)"
         title_cell = Paragraph(html.escape(title_txt), title_cell_style)
