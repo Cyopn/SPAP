@@ -1,0 +1,221 @@
+ataque
+asesinato
+homicidio
+balacera
+explosión
+explosion
+incendio
+secuestro
+desaparecido
+crisis
+emergencia
+urgente
+denuncia
+corrupción
+escándalo
+fraude
+robo masivo
+protesta
+bloqueo
+disturbios
+colapso
+accidente grave
+muerte
+muerto
+muertos
+fallecido
+fallecidos
+feminicidio
+masacre
+ejecución
+ejecutado
+ejecutados
+atentado
+tiroteo
+enfrentamiento armado
+herido grave
+heridos graves
+explosivo
+bomba
+incendio forestal
+derrumbe
+deslave
+inundación severa
+huracán
+tornado
+sismo fuerte
+terremoto
+tsunami
+evacuación
+zona de desastre
+estado de excepción
+toque de queda
+hospitalizado grave
+intoxicación masiva
+brote epidémico
+epidemia
+pandemia
+alerta sanitaria
+contaminación tóxica
+fuga de gas
+fuga química
+derrame tóxico
+colapso estructural
+colapso vial
+cierre total
+paro total
+saqueo
+motín
+violencia extrema
+desaparición forzada
+trata de personas
+narcobloqueo
+hallazgo de cuerpos
+violencia armada
+secuestro masivo
+amenaza de bomba
+
+crítica
+critica
+queja
+denuncia leve
+problema
+fallas
+inconformidad
+retraso
+afectación
+afectacion
+investigación
+posible
+preocupación
+alerta
+incidente
+incidencias
+irregularidad
+irregularidades
+anomalía
+anomalia
+reporte ciudadano
+reporte preliminar
+verificación
+verificacion
+revisión
+revision
+seguimiento
+monitoreo
+investigación preliminar
+bajo investigación
+en investigación
+sospecha
+presunto
+presunta
+probable
+probables
+advertencia
+aviso
+señalamiento
+señalamientos
+incumplimiento
+incumplimientos
+deficiencia
+deficiencias
+interrupción parcial
+interrupcion parcial
+suspensión temporal
+suspension temporal
+saturación
+saturacion
+congestión
+congestion
+demora
+demoras
+riesgo potencial
+vulnerabilidad
+vulnerabilidades
+tensión
+tension
+conflicto
+conflicto local
+movilización
+movilizacion
+cierre parcial
+afectación temporal
+afectacion temporal
+contingencia
+incidente vial
+falla técnica
+falla tecnica
+
+informó
+informo
+anunció
+anuncio
+reportó
+reporto
+evento
+inauguración
+programa
+participación
+participacion
+actividad
+datos
+estadísticas
+estadisticas
+comunicado
+comunicó
+comunicado oficial
+boletín
+boletin
+actualización
+actualizacion
+reporte informativo
+informe
+resumen
+declaración
+declaracion
+mensaje institucional
+agenda
+calendario
+convocatoria
+invitación
+invitacion
+jornada
+campaña
+campana
+taller
+conferencia
+foro
+seminario
+reunión
+reunion
+mesa de trabajo
+sesión
+sesion
+anuncio oficial
+presentación
+presentacion
+lanzamiento
+apertura
+clausura
+ceremonia
+reconocimiento
+premiación
+premiacion
+balance
+resultados
+avance
+avances
+seguimiento informativo
+colaboración
+colaboracion
+coordinación
+coordinacion
+iniciativa
+difusión
+difusion
+orientación
+orientacion
+capacitación
+capacitacion
+contenido educativo
+aviso informativo

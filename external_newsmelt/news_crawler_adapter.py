@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import time
 import os
 import json
@@ -8,6 +7,7 @@ import logging
 from pathlib import Path
 import requests
 from typing import Dict, Any, List
+from core.timezone_mx import now_mx
 
 DEFAULT_TIMEOUT = 15
 
@@ -59,7 +59,7 @@ class NewsCrawlerAdapter:
                 resp.raise_for_status()
                 payload = resp.json()
                 try:
-                    now = datetime.now(timezone.utc)
+                    now = now_mx()
                     s = {"total_requests": 0, "last_call": None, "daily": {}}
                     if self._stats_file.exists():
                         with open(self._stats_file, "r", encoding="utf-8") as sf:

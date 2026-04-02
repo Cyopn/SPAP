@@ -9,3 +9,4 @@ transformers/
 cache_dir/
 pa_feed.db
 newsapi_request_stats.json
+reports/

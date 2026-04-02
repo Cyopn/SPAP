@@ -8,18 +8,25 @@
   </head>
   <body class="bg-light">
     {% include 'navbar.html' %}
-    <div class="container py-5">
-      <h1 class="mb-4">Buscador de Noticias</h1>
-
-      <h2 class="mt-5">Feed en tiempo real</h2>
+    <div class="container py-3">
+      <h1 class="mb-4">Feed en tiempo real</h1>
       <div class="d-flex gap-2 mb-3">
-        <a href="/config" class="btn btn-link">Ir a configuración</a>
         <button class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#filterModal">Filtros</button>
+      </div>
+      <!-- Botones de ordenamiento -->
+      <div class="d-flex gap-2 mb-3 align-items-center">
+        <div class="btn-group" role="group" aria-label="Ordenamiento">
+          <button id="sort-pub" class="btn btn-outline-primary btn-sm sort-btn" data-field="published_at" aria-pressed="false">Publicado <span class="sort-arrow">↓</span></button>
+          <button id="sort-ext" class="btn btn-outline-secondary btn-sm sort-btn" data-field="extracted_at" aria-pressed="false">Extraído <span class="sort-arrow"></span></button>
+        </div>
+        <div class="ms-3 small text-muted">
+          Orden actual: <span id="current-sort">Publicado ↓</span>
+        </div>
       </div>
 
       <!-- Modal de filtros -->
       <div class="modal fade" id="filterModal" tabindex="-1" aria-labelledby="filterModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable modal-fullscreen-sm-down">
           <div class="modal-content">
             <div class="modal-header">
               <h5 class="modal-title" id="filterModalLabel">Filtros de búsqueda</h5>
@@ -35,13 +42,13 @@
                   <label class="form-label">Nivel (nivel de prioridad)</label>
                   <div>
                     <div class="form-check form-check-inline">
-                      <input class="form-check-input" type="checkbox" id="lvl_high" value="high" /><label class="form-check-label" for="lvl_high">Alta</label>
+                      <input class="form-check-input" type="checkbox" id="lvl_alto" value="alto" /><label class="form-check-label" for="lvl_alto">alto</label>
                     </div>
                     <div class="form-check form-check-inline">
-                      <input class="form-check-input" type="checkbox" id="lvl_medium" value="medium" /><label class="form-check-label" for="lvl_medium">Media</label>
+                      <input class="form-check-input" type="checkbox" id="lvl_medio" value="medio" /><label class="form-check-label" for="lvl_medio">medio</label>
                     </div>
                     <div class="form-check form-check-inline">
-                      <input class="form-check-input" type="checkbox" id="lvl_low" value="low" /><label class="form-check-label" for="lvl_low">Baja</label>
+                      <input class="form-check-input" type="checkbox" id="lvl_bajo" value="bajo" /><label class="form-check-label" for="lvl_bajo">bajo</label>
                     </div>
                   </div>
                 </div>
@@ -50,14 +57,14 @@
                   <select id="filter-origin" class="form-select">
                     <option value="all">Todos</option>
                     <option value="monitor">Monitor</option>
-                    <option value="telegram_manual">Telegram (manual)</option>
-                    <option value="telegram_search">Telegram (búsqueda)</option>
+                    <option value="telegram_search">Telegram (busqueda)</option>
+                    <option value="telegram_add">Telegram (agregado)</option>
                     <option value="desconocido">Desconocido</option>
                   </select>
                 </div>
                 <div class="col-md-2">
                   <label class="form-label">Fuente</label>
-                  <input id="filter-source" class="form-control" placeholder="Fuente (ej. NewsAPI, Reddit...)" />
+                  <input id="filter-source" class="form-control" placeholder="Fuente (ej. NewsAPI, Hacker News...)" />
                 </div>
 
                 <div class="col-md-2 text-end">
@@ -131,6 +138,9 @@
       <script>
         const liveList = document.getElementById('live-list')
         let allItems = []
+        // ordenamiento: campo y dirección
+        let sortField = 'published_at' // 'published_at' o 'extracted_at'
+        let sortDir = 'desc' // 'asc' o 'desc'
         
         function zeroPad(n) {
           return String(n).padStart(2, '0')
@@ -151,6 +161,38 @@
           }
         }
         
+        function normalizeIngestedBy(it) {
+          const raw = ((it && it.ingested_by) || '').toString().trim().toLowerCase()
+          if (raw === 'monitor' || raw === 'telegram_search' || raw === 'telegram_add') return raw
+          if (raw === 'telegram_manual') return 'telegram_add'
+        
+          const origin = ((it && it.origin) || '').toString().trim().toLowerCase()
+          if (origin === 'telegram_search') return 'telegram_search'
+          if (origin === 'telegram_manual' || origin === 'telegram_add') return 'telegram_add'
+          if (origin === 'monitor' || origin === 'realtime') return 'monitor'
+        
+          const source = ((it && it.source) || '').toString().trim().toLowerCase()
+          if (source === 'telegram') return 'telegram_add'
+          if (source) return 'monitor'
+          return 'desconocido'
+        }
+        
+        function ingestedByLabel(val) {
+          if (val === 'telegram_search') return 'busqueda de telegram'
+          if (val === 'telegram_add') return 'agregado por telegram'
+          if (val === 'monitor') return 'monitor'
+          return 'desconocido'
+        }
+        
+        function sendEngagement(itemId, action) {
+          if (!itemId) return
+          fetch(`/api/items/${itemId}/engagement`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action })
+          }).catch(() => {})
+        }
+        
         function renderItem(it) {
           const el = document.createElement('div')
           el.className = 'list-group-item'
@@ -165,6 +207,8 @@
             a.href = it.url
             a.target = '_blank'
             a.rel = 'noopener noreferrer'
+            a.className = 'news-link'
+            a.dataset.itemId = String(it.id || '')
             a.textContent = it.title || '(sin título)'
             titleWrap.appendChild(a)
           } else {
@@ -177,12 +221,37 @@
         
           const sub = document.createElement('p')
           sub.className = 'mb-1 text-muted'
-          const origin = it.origin || (it.meta && it.meta.method) || 'desconocido'
+          const ingestedBy = normalizeIngestedBy(it)
+          const originLabel = ingestedByLabel(ingestedBy)
           const extracted = formatDate(it.extracted_at) || ''
           const fuente = it.source || ''
-          sub.textContent = `Fuente: ${fuente} • Nivel: ${it.level} • Origen: ${origin} • Extraído: ${extracted}`
+          sub.textContent = `Fuente: ${fuente} • Nivel: ${it.level} • Origen: ${originLabel} • Extraido: ${extracted}`
+        
+          const stats = document.createElement('div')
+          stats.className = 'small text-muted'
+          const views = Number(it.views_count || 0)
+          const shares = Number(it.shares_count || 0)
+          stats.textContent = `Vistas: ${views} • Compartidos: ${shares}`
+        
+          const actions = document.createElement('div')
+          actions.className = 'mt-1'
+          if (it.url) {
+            const shareBtn = document.createElement('button')
+            shareBtn.type = 'button'
+            shareBtn.className = 'btn btn-outline-secondary btn-sm share-news-btn'
+            shareBtn.dataset.itemId = String(it.id || '')
+            shareBtn.dataset.url = String(it.url || '')
+            shareBtn.dataset.title = String(it.title || '(sin título)')
+            shareBtn.textContent = 'Compartir'
+            actions.appendChild(shareBtn)
+          }
+        
           el.appendChild(header)
           el.appendChild(sub)
+          el.appendChild(stats)
+          if (actions.childNodes.length > 0) {
+            el.appendChild(actions)
+          }
           return el
         }
         
@@ -209,6 +278,34 @@
             }
           }
         }
+        
+        liveList.addEventListener('click', async (evt) => {
+          const target = evt.target
+          if (!(target instanceof Element)) return
+        
+          if (target instanceof HTMLAnchorElement && target.classList.contains('news-link')) {
+            const itemId = target.dataset.itemId || ''
+            if (itemId) sendEngagement(itemId, 'view')
+            return
+          }
+        
+          if (target.classList.contains('share-news-btn')) {
+            evt.preventDefault()
+            const itemId = target.dataset.itemId || ''
+            const url = target.dataset.url || ''
+            const title = target.dataset.title || 'Noticia'
+            if (!url) return
+        
+            try {
+              if (navigator.share) {
+                await navigator.share({ title, url })
+              } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(url)
+              }
+              if (itemId) sendEngagement(itemId, 'share')
+            } catch (e) {}
+          }
+        })
         
         // --- filtros y paginación cliente ----------------------------------
         function parseDateInput(v) {
@@ -315,9 +412,9 @@
         function applyFilters() {
           currentPage = 1
           const q = (document.getElementById('filter-search').value || '').toLowerCase().trim()
-          const lvlHigh = document.getElementById('lvl_high').checked
-          const lvlMed = document.getElementById('lvl_medium').checked
-          const lvlLow = document.getElementById('lvl_low').checked
+          const lvlAlto = document.getElementById('lvl_alto').checked
+          const lvlMedio = document.getElementById('lvl_medio').checked
+          const lvlBajo = document.getElementById('lvl_bajo').checked
           const origin = document.getElementById('filter-origin').value
           const sourceQ = (document.getElementById('filter-source').value || '').toLowerCase().trim()
           // handle presets
@@ -345,7 +442,7 @@
             extTo = r.to
           }
         
-          const levelFilterActive = lvlHigh || lvlMed || lvlLow
+          const levelFilterActive = lvlAlto || lvlMedio || lvlBajo
         
           const filtered = allItems.filter((it) => {
             // search
@@ -359,19 +456,19 @@
               const rawLvl = (it.level || '').toLowerCase()
               let lvlNorm = rawLvl
               try {
-                if (rawLvl.includes('crit')) lvlNorm = 'high'
-                else if (rawLvl.includes('med')) lvlNorm = 'medium'
-                else if (rawLvl.includes('baj') || rawLvl.includes('low')) lvlNorm = 'low'
+                if (rawLvl.includes('alt')) lvlNorm = 'alto'
+                else if (rawLvl.includes('med')) lvlNorm = 'medio'
+                else if (rawLvl.includes('baj')) lvlNorm = 'bajo'
               } catch (e) {
                 lvlNorm = rawLvl
               }
-              if (lvlNorm === 'high' && !lvlHigh) return false
-              if (lvlNorm === 'medium' && !lvlMed) return false
-              if (lvlNorm === 'low' && !lvlLow) return false
+              if (lvlNorm === 'alto' && !lvlAlto) return false
+              if (lvlNorm === 'medio' && !lvlMedio) return false
+              if (lvlNorm === 'bajo' && !lvlBajo) return false
             }
             // origin
             if (origin && origin !== 'all') {
-              const o = it.origin || (it.meta && it.meta.method) || 'desconocido'
+              const o = normalizeIngestedBy(it)
               if (origin === 'desconocido') {
                 if (o !== 'desconocido') return false
               } else if (o !== origin) return false
@@ -413,9 +510,9 @@
             return true
           })
         
-          // asignar y renderizar la primera página
+          // asignar, ordenar y renderizar la primera página
           filteredItems = filtered
-          renderPage()
+          sortAndRender()
         }
         
         document.getElementById('filter-apply').addEventListener('click', (e) => {
@@ -425,17 +522,117 @@
         document.getElementById('filter-reset').addEventListener('click', (e) => {
           e.preventDefault()
           document.getElementById('filter-search').value = ''
-          document.getElementById('lvl_high').checked = false
-          document.getElementById('lvl_medium').checked = false
-          document.getElementById('lvl_low').checked = false
+          document.getElementById('lvl_alto').checked = false
+          document.getElementById('lvl_medio').checked = false
+          document.getElementById('lvl_bajo').checked = false
           document.getElementById('filter-origin').value = 'all'
           document.getElementById('filter-source').value = ''
+          document.getElementById('filter-pub-range').value = 'all'
+          document.getElementById('filter-ext-range').value = 'all'
           document.getElementById('filter-pub-from').value = ''
           document.getElementById('filter-pub-to').value = ''
           document.getElementById('filter-ext-from').value = ''
           document.getElementById('filter-ext-to').value = ''
+          handleRangeVisibility()
           applyFilters()
         })
+        
+        // --- ordenamiento cliente ----------------------------------
+        function safeDateVal(it, field) {
+          try {
+            const v = it[field]
+            if (!v) return 0
+            const d = new Date(v)
+            return isNaN(d.getTime()) ? 0 : d.getTime()
+          } catch (e) {
+            return 0
+          }
+        }
+        
+        function sortItemsArray(arr) {
+          const field = sortField
+          const dir = sortDir === 'asc' ? 1 : -1
+          arr.sort((a, b) => {
+            const va = safeDateVal(a, field)
+            const vb = safeDateVal(b, field)
+            if (va === vb) return 0
+            return va < vb ? -1 * dir : 1 * dir
+          })
+        }
+        
+        function sortAndRender() {
+          sortItemsArray(filteredItems)
+          renderPage()
+        }
+        
+        function updateSortLabel() {
+          const el = document.getElementById('current-sort')
+          const friendly = sortField === 'published_at' ? 'Publicado' : 'Extraído'
+          const arrow = sortDir === 'asc' ? '↑' : '↓'
+          el.textContent = `${friendly} ${arrow}`
+        }
+        
+        // actualizar etiqueta y UI de botones
+        function setSort(field, dir) {
+          sortField = field
+          sortDir = dir
+          // persistir preferencia
+          try {
+            localStorage.setItem('feed_sort', JSON.stringify({ field, dir }))
+          } catch (e) {}
+          // actualizar flechas y clases
+          document.querySelectorAll('.sort-btn').forEach((btn) => {
+            const f = btn.getAttribute('data-field')
+            const arrowEl = btn.querySelector('.sort-arrow')
+            if (f === field) {
+              btn.classList.remove('btn-outline-primary', 'btn-outline-secondary')
+              // promote to filled primary/secondary dependiendo del rol
+              if (f === 'published_at') btn.classList.add('btn-primary')
+              else btn.classList.add('btn-secondary')
+              btn.setAttribute('aria-pressed', 'true')
+              if (arrowEl) arrowEl.textContent = dir === 'asc' ? '↑' : '↓'
+            } else {
+              // reset others to outline style
+              btn.classList.remove('btn-primary', 'btn-secondary')
+              if (f === 'published_at') btn.classList.add('btn-outline-primary')
+              else btn.classList.add('btn-outline-secondary')
+              btn.setAttribute('aria-pressed', 'false')
+              if (arrowEl) arrowEl.textContent = ''
+            }
+          })
+          updateSortLabel()
+          sortAndRender()
+        }
+        
+        // listener único para botones de ordenamiento (clic toggles direction)
+        document.querySelectorAll('.sort-btn').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault()
+            const field = btn.getAttribute('data-field')
+            if (!field) return
+            // si hacemos clic en el mismo campo, invertimos dirección
+            if (field === sortField) {
+              sortDir = sortDir === 'asc' ? 'desc' : 'asc'
+            } else {
+              // si cambiamos de campo, por defecto mostrar descendente (más recientes primero)
+              sortField = field
+              sortDir = 'desc'
+            }
+            setSort(sortField, sortDir)
+          })
+        })
+        
+        // restaurar preferencia guardada
+        try {
+          const saved = JSON.parse(localStorage.getItem('feed_sort') || 'null')
+          if (saved && saved.field) {
+            sortField = saved.field
+            sortDir = saved.dir === 'asc' ? 'asc' : 'desc'
+          }
+        } catch (e) {}
+        
+        // aplicar UI inicial y etiqueta
+        setSort(sortField, sortDir)
       </script>
     </div>
   </body>

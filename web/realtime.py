@@ -1,7 +1,6 @@
 from __future__ import annotations
 from core import storage
 from core import classifier
-from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 
 import json
@@ -9,6 +8,7 @@ import os
 
 import importlib
 from typing import Any
+from core.timezone_mx import now_mx_iso
 
 _redis: Any = None
 try:
@@ -47,34 +47,37 @@ def publish_item(item: dict) -> None:
         cls = classifier.classify_text(text, title=title, keyword=kw)
 
         if isinstance(cls, dict):
-            impacto = (cls.get("impacto") or "MEDIO").upper()
+            impacto = str(cls.get("impacto") or "medio").strip().lower()
         elif isinstance(cls, tuple) and len(cls) == 3:
             lvl = (cls[0] or "").lower()
-            if lvl == "high":
-                impacto = "CRITICO"
-            elif lvl == "medium":
-                impacto = "MEDIO"
-            elif lvl == "low":
-                impacto = "BAJO"
+            if lvl == "alto":
+                impacto = "alto"
+            elif lvl == "medio":
+                impacto = "medio"
+            elif lvl == "bajo":
+                impacto = "bajo"
             else:
-                impacto = "MEDIO"
+                impacto = "medio"
         elif isinstance(cls, str):
-            impacto = (cls or "MEDIO").upper()
+            impacto = str(cls or "medio").strip().lower()
         else:
-            impacto = "MEDIO"
+            impacto = "medio"
+
+        if impacto not in ("alto", "medio", "bajo"):
+            impacto = "medio"
 
         level = impacto
-        if impacto == "CRITICO":
+        if impacto == "alto":
             emoji = "🔴"
             color = "rojo"
-        elif impacto == "MEDIO":
+        elif impacto == "medio":
             emoji = "🟠"
             color = "naranja"
         else:
             emoji = "🟢"
             color = "verde"
 
-        extracted_at = datetime.now(timezone.utc).isoformat()
+        extracted_at = now_mx_iso()
 
         enriched = {
             "source": item.get("source", "realtime_fallback"),

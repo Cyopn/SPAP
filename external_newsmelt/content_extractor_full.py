@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from pathlib import Path
-import time
 import logging
 from typing import List, Dict, Any
+from core.timezone_mx import now_mx_iso
 
 import requests
 import newspaper
@@ -95,7 +93,7 @@ class ContentExtractorFull:
         item["raw_full_content"] = raw_clean
         item["spacy_full_content"] = spacy_clean
         item["final_full_content"] = final_content
-        item["extracted_at"] = datetime.now(timezone.utc).isoformat()
+        item["extracted_at"] = now_mx_iso()
         return item
 
     def process_articles(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

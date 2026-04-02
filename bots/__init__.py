@@ -1,3 +1,3 @@
-from . import telegram_bot
+"""Bots package."""
 
 __all__ = ["telegram_bot"]

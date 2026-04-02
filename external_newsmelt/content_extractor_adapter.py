@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import time
 import requests
-import os
 from typing import List, Dict, Any
+from core.timezone_mx import now_mx_iso
 
 DEFAULT_TIMEOUT = 15
 
@@ -36,7 +34,7 @@ class ContentExtractorAdapter:
             item.setdefault("content", "")
             if content:
                 item["content"] = content
-            item["extracted_at"] = datetime.now(timezone.utc).isoformat()
+            item["extracted_at"] = now_mx_iso()
             return item
 
         if self.max_workers and self.max_workers > 1:

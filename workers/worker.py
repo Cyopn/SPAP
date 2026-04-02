@@ -10,10 +10,8 @@ from typing import Any
 from core.logger import log, log_exc
 
 import importlib
-from typing import Any
-from datetime import datetime, timezone
 from core import telegram as core_telegram
-import os
+from core.timezone_mx import now_mx_iso
 
 _redis: Any = None
 try:
@@ -103,51 +101,52 @@ def run_worker():
 
             cls_result = classifier.classify_text(title_s + " " + summary_s)
 
-            level = "MEDIO"
+            level = "medio"
             emoji = ""
             color = ""
             if isinstance(cls_result, dict):
-                impacto = (cls_result.get("impacto") or "MEDIO").upper()
-                if impacto == "CRITICO":
-                    level = "CRITICO"
+                impacto = str(cls_result.get("impacto")
+                              or "medio").strip().lower()
+                if impacto == "alto":
+                    level = "alto"
                     emoji = "🔴"
                     color = "rojo"
-                elif impacto == "MEDIO":
-                    level = "MEDIO"
+                elif impacto == "medio":
+                    level = "medio"
                     emoji = "🟠"
                     color = "naranja"
                 else:
-                    level = "BAJO"
+                    level = "bajo"
                     emoji = "🟢"
                     color = "verde"
                 meta = cls_result
             elif isinstance(cls_result, tuple) and len(cls_result) == 3:
                 lvl0 = (cls_result[0] or "").lower()
-                if lvl0 == "high":
-                    level = "CRITICO"
+                if lvl0 == "alto":
+                    level = "alto"
                     emoji = "🔴"
                     color = "rojo"
-                elif lvl0 == "medium":
-                    level = "MEDIO"
+                elif lvl0 == "medio":
+                    level = "medio"
                     emoji = "🟠"
                     color = "naranja"
                 else:
-                    level = "BAJO"
+                    level = "bajo"
                     emoji = "🟢"
                     color = "verde"
                 meta = {"legacy": True, "value": cls_result}
             elif isinstance(cls_result, str):
-                imp = (cls_result or "MEDIO").upper()
-                if imp == "CRITICO" or imp == "HIGH":
-                    level = "CRITICO"
+                imp = str(cls_result or "medio").strip().lower()
+                if imp == "alto":
+                    level = "alto"
                     emoji = "🔴"
                     color = "rojo"
-                elif imp == "MEDIO" or imp == "MEDIUM":
-                    level = "MEDIO"
+                elif imp == "medio":
+                    level = "medio"
                     emoji = "🟠"
                     color = "naranja"
                 else:
-                    level = "BAJO"
+                    level = "bajo"
                     emoji = "🟢"
                     color = "verde"
                 meta = {"legacy_str": cls_result}
@@ -171,7 +170,7 @@ def run_worker():
                 "summary": summary_val,
                 "published_at": published_at_val,
                 "keyword": keyword_val,
-                "extracted_at": datetime.now(timezone.utc).isoformat(),
+                "extracted_at": now_mx_iso(),
                 "level": level,
                 "emoji": emoji,
                 "color": color,
@@ -188,55 +187,33 @@ def run_worker():
                 pass
 
             try:
-                if (isinstance(enriched_item.get("level"), str) and enriched_item.get("level").upper() == "CRITICO"):
-                    log(
-                        f"worker: detected high-impact item id={item_id} title={title_val}")
-                    try:
-                        cfg = storage.get_config("monitor_config") or {}
-                    except Exception:
-                        cfg = {}
-                    target_chat = None
-                    try:
-                        target_chat = cfg.get("telegram_target_chat") if isinstance(
-                            cfg, dict) else None
-                    except Exception:
-                        target_chat = None
-                    if not target_chat:
-                        target_chat = os.environ.get("TELEGRAM_TARGET_CHAT_ID")
-                    alerts_enabled = False
-                    try:
-                        alerts_enabled = bool(cfg.get("telegram_alerts")) if isinstance(
-                            cfg, dict) else False
-                    except Exception:
-                        alerts_enabled = False
-
-                    if target_chat and alerts_enabled:
-                        try:
-                            resp = core_telegram.send_item_notification(
-                                enriched_item, str(target_chat))
-                            if resp and isinstance(resp, dict) and resp.get("ok"):
-                                try:
-                                    msg_id = resp.get(
-                                        "result", {}).get("message_id")
-                                except Exception:
-                                    msg_id = None
-                                try:
-                                    storage.set_tg_message_id(item_id, msg_id)
-                                except Exception:
-                                    pass
-                                log(
-                                    f"worker: alert sent for item_id={item_id} to {target_chat} message_id={msg_id}")
-                            else:
-                                log(
-                                    f"worker: alert FAILED for item_id={item_id} to {target_chat} resp={resp}", "ERROR")
-                        except Exception as e:
-                            log_exc(
-                                f"worker: exception sending alert for item_id={item_id}", e)
-                    else:
-                        log(
-                            f"worker: alert not sent (no target or alerts disabled) target={target_chat} enabled={alerts_enabled}")
+                cfg = storage.get_config("monitor_config") or {}
             except Exception:
-                pass
+                cfg = {}
+
+            try:
+                send_results = core_telegram.send_item_notification_to_targets(
+                    enriched_item,
+                    cfg=cfg,
+                    item_id=item_id,
+                )
+                first_msg_id = None
+                for r in send_results:
+                    if r.get("ok") and r.get("message_id"):
+                        first_msg_id = r.get("message_id")
+                        break
+
+                if first_msg_id is not None:
+                    try:
+                        storage.set_tg_message_id(item_id, first_msg_id)
+                    except Exception:
+                        pass
+            except Exception as e:
+                try:
+                    log_exc(
+                        f"worker: exception sending alert for item_id={item_id}", e)
+                except Exception:
+                    pass
 
         except Exception:
             time.sleep(1)

@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 import traceback
 from typing import Optional
+from core.timezone_mx import MX_TZ, now_mx
 
 
 def _now_formatted() -> str:
     try:
-        return datetime.now().strftime("%H:%M:%S - %d/%m/%Y")
+        return now_mx().strftime("%H:%M:%S - %d/%m/%Y")
     except Exception:
-        return datetime.utcnow().strftime("%H:%M:%S - %d/%m/%Y")
+        return datetime.now(MX_TZ).strftime("%H:%M:%S - %d/%m/%Y")
 
 
 def log(message: str, level: str = "INFO") -> None:

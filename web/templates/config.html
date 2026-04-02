@@ -8,7 +8,7 @@
   </head>
   <body class="bg-light">
     {% include 'navbar.html' %}
-    <div class="container py-5">
+    <div class="container py-3">
       <h1 class="mb-4">Configuración del Monitor</h1>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -19,8 +19,9 @@
         {% endif %}
       {% endwith %}
 
-      <form method="post" action="/config" class="mb-4">
+      <form method="post" action="/config" enctype="multipart/form-data" class="mb-4">
         <div class="row g-3">
+
           <div class="col-12">
             <div class="card">
               <div class="card-body">
@@ -32,7 +33,11 @@
                     <div class="d-flex flex-wrap gap-2">
                       {% for s in sources %}
                       <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources" id="src_{{ s }}" {{ 'checked' if s in params.sources else '' }}>
+                        {% if s in params.sources %}
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources" id="src_{{ s }}" checked>
+                        {% else %}
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources" id="src_{{ s }}">
+                        {% endif %}
                         <label class="form-check-label" for="src_{{s}}">{{s}}</label>
                       </div>
                       {% endfor %}
@@ -51,66 +56,261 @@
             </div>
           </div>
 
-          <div class="col-md-6">
+          <div class="col-12">
             <div class="card">
               <div class="card-body">
                 <h5 class="card-title">Ubicación</h5>
-                <p class="text-muted small">Opcional: limita búsquedas a una ubicación administrativa.</p>
+                <p class="text-muted small">Limita búsquedas a una ubicación.</p>
+                {% set loc = none %}
+                {% if params %}
+                  {% set loc = params.get('location') %}
+                {% endif %}
+                {% if not loc %}
+                  {% set loc = dict() %}
+                {% endif %}
                 <div class="row gy-2">
                   <div class="col-md-4">
-                    <label class="form-label">Estado</label>
-                    <input type="text" name="location_state" class="form-control" value="{{ params.location.state if params.location is defined else params.get('location',{}).get('state','') }}" placeholder="Ej: Ciudad de México">
-                  </div>
-                  <div class="col-md-4">
                     <label class="form-label">País</label>
-                    <input type="text" name="location_country" class="form-control" value="{{ params.location.country if params.location is defined else params.get('location',{}).get('country','') }}" placeholder="Ej: México">
+                    <select id="location_country_select" name="location_country" class="form-select" data-initial="{{ loc.get('country','') }}">
+                      <option value="">Mundo</option>
+                    </select>
                   </div>
                   <div class="col-md-4">
-                    <label class="form-label">Municipio</label>
-                    <input type="text" name="location_municipality" class="form-control" value="{{ params.location.municipality if params.location is defined else params.get('location',{}).get('municipality','') }}" placeholder="Ej: Benito Juárez">
+                    <label class="form-label">Estado / Provincia</label>
+                    <select id="location_state_select" name="location_state" class="form-select" data-initial="{{ loc.get('state','') }}" disabled>
+                      <option value="">Selecciona país primero</option>
+                    </select>
                   </div>
                   <div class="col-md-4">
-                    <label class="form-label">Colonia</label>
-                    <input type="text" name="location_colony" class="form-control" value="{{ params.location.colony if params.location is defined else params.get('location',{}).get('colony','') }}" placeholder="Opcional">
+                    <label class="form-label">Municipio / Ciudad</label>
+                    <select id="location_municipality_select" name="location_municipality" class="form-select" data-initial="{{ loc.get('municipality','') }}" disabled>
+                      <option value="">Selecciona estado/provincia</option>
+                    </select>
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Colonia / Localidad</label>
+                    <input type="text" name="location_colony" class="form-control" value="{{ loc.get('colony','') }}" placeholder="Opcional">
                   </div>
                 </div>
-                <div class="row mt-2">
-                  <div class="col-md-6 form-check">
-                    <input class="form-check-input" type="checkbox" name="use_location_filter" id="use_location_filter" value="1" {% if params.get('use_location_filter') %}checked{% endif %}>
-                    <label class="form-check-label" for="use_location_filter">Aplicar filtro por ubicación</label>
-                  </div>
-                  <div class="col-md-6">
-                    <label class="form-label">Radio (km)</label>
-                    <input type="number" step="1" min="0" name="location_radius" class="form-control" value="{{ params.get('location_radius','') }}" placeholder="Ej: 50">
-                  </div>
-                </div>
+                <div class="form-text mt-2">Si eliges "Mundo", no se restringe por país.</div>
               </div>
             </div>
           </div>
 
-          <div class="col-md-6">
+          <div class="col-12">
             <div class="card">
               <div class="card-body">
                 <h5 class="card-title">Telegram</h5>
-                <p class="text-muted small">Configura notificaciones automáticas (opcional).</p>
-                <div class="mb-2">
-                  <label class="form-label">Chat objetivo Telegram</label>
-                  <input type="text" name="telegram_target_chat" class="form-control" value="{{ params.telegram_target_chat }}" placeholder="@canal_o_ID, t.me/usuario">
+                <p class="text-muted small">Configura múltiples chats y define por separado alertas, reporte 1 clic y reporte automático.</p>
+
+                {% set tg_targets = telegram_targets if telegram_targets else [] %}
+                <div class="alert alert-info py-2 small mb-2">
+                  Guía rápida: 1) agrega el chat, 2) marca qué tipo de envíos recibirá, 3) elige niveles.
                 </div>
-                <div class="form-check mb-2">
-                  <input class="form-check-input" type="checkbox" value="1" name="telegram_alerts" id="telegram_alerts" {{ 'checked' if params.telegram_alerts else '' }}>
-                  <label class="form-check-label" for="telegram_alerts">Enviar alertas (CRITICO)</label>
+                <div id="telegram_targets_tbody" class="accordion mb-2">
+                  {% if tg_targets %}
+                    {% for t in tg_targets %}
+                    <div class="accordion-item border rounded mb-2" data-row="{{ loop.index0 }}">
+                      <h2 class="accordion-header" id="tg_head_{{ loop.index0 }}">
+                        <button class="accordion-button py-2 {{ 'collapsed' if not loop.first else '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#tg_body_{{ loop.index0 }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="tg_body_{{ loop.index0 }}">
+                          <div class="w-100 d-flex flex-wrap align-items-center gap-2">
+                            <span class="fw-semibold tg-row-title">{{ t.get('label') or ('Chat ' ~ loop.index) }}</span>
+                            <span class="text-muted small tg-row-chat">{{ t.get('chat_id', '') }}</span>
+                            <span class="ms-auto badge tg-status-badge {{ 'text-bg-success' if t.get('enabled') else 'text-bg-secondary' }}">{{ 'Activo' if t.get('enabled') else 'Inactivo' }}</span>
+                          </div>
+                        </button>
+                      </h2>
+                      <div id="tg_body_{{ loop.index0 }}" class="accordion-collapse collapse {{ 'show' if loop.first else '' }}" aria-labelledby="tg_head_{{ loop.index0 }}" data-bs-parent="#telegram_targets_tbody">
+                        <div class="accordion-body pt-2">
+                          <input type="hidden" name="tg_row_idx" value="{{ loop.index0 }}">
+                          <div class="row g-2">
+                            <div class="col-12 col-xl-5">
+                              <label class="form-label mb-1 small">Chat</label>
+                              <input type="text" name="tg_chat_{{ loop.index0 }}" class="form-control form-control-sm" value="{{ t.get('chat_id', '') }}" placeholder="@canal, -100..., t.me/...">
+                              <label class="form-label mt-2 mb-1 small">Etiqueta (opcional)</label>
+                              <input type="text" name="tg_label_{{ loop.index0 }}" class="form-control form-control-sm" value="{{ t.get('label', '') }}" placeholder="Ej. Operaciones">
+                            </div>
+                            <div class="col-12 col-xl-7">
+                              <div class="row g-2">
+                                <div class="col-12 col-md-4">
+                                  <div class="border rounded p-2 h-100">
+                                    <div class="form-check form-switch mb-2">
+                                      <input class="form-check-input" type="checkbox" name="tg_alert_enabled_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_alerts', true) else '' }}>
+                                      <label class="form-check-label">Alertas</label>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap ps-1">
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_alto_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_alto') else '' }}>
+                                        <label class="form-check-label small">alto</label>
+                                      </div>
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_medio_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_medio') else '' }}>
+                                        <label class="form-check-label small">medio</label>
+                                      </div>
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_bajo_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_bajo') else '' }}>
+                                        <label class="form-check-label small">bajo</label>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                  <div class="border rounded p-2 h-100">
+                                    <div class="form-check form-switch mb-2">
+                                      <input class="form-check-input" type="checkbox" name="tg_rep_manual_enabled_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_manual', true) else '' }}>
+                                      <label class="form-check-label">Reporte 1 clic</label>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap ps-1">
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_rep_manual_alto_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_manual_alto', true) else '' }}>
+                                        <label class="form-check-label small">alto</label>
+                                      </div>
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_rep_manual_medio_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_manual_medio', true) else '' }}>
+                                        <label class="form-check-label small">medio</label>
+                                      </div>
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_rep_manual_bajo_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_manual_bajo', true) else '' }}>
+                                        <label class="form-check-label small">bajo</label>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                  <div class="border rounded p-2 h-100">
+                                    <div class="form-check form-switch mb-2">
+                                      <input class="form-check-input" type="checkbox" name="tg_rep_auto_enabled_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_auto') else '' }}>
+                                      <label class="form-check-label">Reporte automático</label>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap ps-1">
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_rep_auto_alto_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_auto_alto', true) else '' }}>
+                                        <label class="form-check-label small">alto</label>
+                                      </div>
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_rep_auto_medio_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_auto_medio', true) else '' }}>
+                                        <label class="form-check-label small">medio</label>
+                                      </div>
+                                      <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tg_rep_auto_bajo_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('send_report_auto_bajo', true) else '' }}>
+                                        <label class="form-check-label small">bajo</label>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="col-12 d-flex justify-content-between align-items-center border-top pt-2 mt-1">
+                              <div>
+                                <div class="form-check form-switch d-inline-block">
+                                  <input class="form-check-input" type="checkbox" name="tg_enabled_{{ loop.index0 }}" value="1" {{ 'checked' if t.get('enabled') else '' }}>
+                                  <label class="form-check-label">Chat activo</label>
+                                </div>
+                                <div class="small text-muted">si está apagado, no envía nada</div>
+                              </div>
+                              <button type="button" class="btn btn-outline-danger btn-sm remove-telegram-row">Quitar</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  {% else %}
+                    <div class="accordion-item border rounded mb-2" data-row="0">
+                      <h2 class="accordion-header" id="tg_head_0">
+                        <button class="accordion-button py-2" type="button" data-bs-toggle="collapse" data-bs-target="#tg_body_0" aria-expanded="true" aria-controls="tg_body_0">
+                          <div class="w-100 d-flex flex-wrap align-items-center gap-2">
+                            <span class="fw-semibold tg-row-title">Chat 1</span>
+                            <span class="text-muted small tg-row-chat">sin chat</span>
+                            <span class="ms-auto badge tg-status-badge text-bg-success">Activo</span>
+                          </div>
+                        </button>
+                      </h2>
+                      <div id="tg_body_0" class="accordion-collapse collapse show" aria-labelledby="tg_head_0" data-bs-parent="#telegram_targets_tbody">
+                        <div class="accordion-body pt-2">
+                          <input type="hidden" name="tg_row_idx" value="0">
+                          <div class="row g-2">
+                            <div class="col-12 col-xl-5">
+                              <label class="form-label mb-1 small">Chat</label>
+                              <input type="text" name="tg_chat_0" class="form-control form-control-sm" value="" placeholder="@canal, -100..., t.me/...">
+                              <label class="form-label mt-2 mb-1 small">Etiqueta (opcional)</label>
+                              <input type="text" name="tg_label_0" class="form-control form-control-sm" value="" placeholder="Ej. Operaciones">
+                            </div>
+                            <div class="col-12 col-xl-7">
+                              <div class="row g-2">
+                                <div class="col-12 col-md-4">
+                                  <div class="border rounded p-2 h-100">
+                                    <div class="form-check form-switch mb-2">
+                                      <input class="form-check-input" type="checkbox" name="tg_alert_enabled_0" value="1" checked>
+                                      <label class="form-check-label">Alertas</label>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap ps-1">
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_alto_0" value="1" checked><label class="form-check-label small">alto</label></div>
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_medio_0" value="1"><label class="form-check-label small">medio</label></div>
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_bajo_0" value="1"><label class="form-check-label small">bajo</label></div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                  <div class="border rounded p-2 h-100">
+                                    <div class="form-check form-switch mb-2">
+                                      <input class="form-check-input" type="checkbox" name="tg_rep_manual_enabled_0" value="1" checked>
+                                      <label class="form-check-label">Reporte 1 clic</label>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap ps-1">
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_manual_alto_0" value="1" checked><label class="form-check-label small">alto</label></div>
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_manual_medio_0" value="1" checked><label class="form-check-label small">medio</label></div>
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_manual_bajo_0" value="1" checked><label class="form-check-label small">bajo</label></div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-12 col-md-4">
+                                  <div class="border rounded p-2 h-100">
+                                    <div class="form-check form-switch mb-2">
+                                      <input class="form-check-input" type="checkbox" name="tg_rep_auto_enabled_0" value="1">
+                                      <label class="form-check-label">Reporte automático</label>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-wrap ps-1">
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_auto_alto_0" value="1" checked><label class="form-check-label small">alto</label></div>
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_auto_medio_0" value="1" checked><label class="form-check-label small">medio</label></div>
+                                      <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_auto_bajo_0" value="1" checked><label class="form-check-label small">bajo</label></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="col-12 d-flex justify-content-between align-items-center border-top pt-2 mt-1">
+                              <div>
+                                <div class="form-check form-switch d-inline-block">
+                                  <input class="form-check-input" type="checkbox" name="tg_enabled_0" value="1" checked>
+                                  <label class="form-check-label">Chat activo</label>
+                                </div>
+                                <div class="small text-muted">si está apagado, no envía nada</div>
+                              </div>
+                              <button type="button" class="btn btn-outline-danger btn-sm remove-telegram-row">Quitar</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  {% endif %}
                 </div>
+
                 <div>
-                  <button formaction="/config/send_test_alert" formmethod="post" class="btn btn-outline-secondary">Enviar prueba Telegram</button>
+                  <div class="d-flex gap-2 flex-wrap">
+                     <button type="button" class="btn btn-outline-primary" id="add_telegram_target_row">Agregar chat</button>
+                    <button formaction="/config/send_test_alert" formmethod="post" name="test_level" value="alto" class="btn btn-outline-danger">Prueba alto</button>
+                    <button formaction="/config/send_test_alert" formmethod="post" name="test_level" value="medio" class="btn btn-outline-warning">Prueba medio</button>
+                    <button formaction="/config/send_test_alert" formmethod="post" name="test_level" value="bajo" class="btn btn-outline-success">Prueba bajo</button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         <div class="card mb-3">
-          {% set newsapi_opts = params.get('source_options', {}) .get('newsapi', {}) %}
+          {% set newsapi_opts = params.get('source_options', dict()).get('newsapi', dict()) %}
           <div class="card-body">
-            <h5 class="card-title">NewsAPI (ajustes)</h5>
+            <h5 class="card-title">NewsAPI</h5>
             <div class="mb-2">
               <label class="form-label">Dominios permitidos (separados por comas)</label>
               <input type="text" name="newsapi_domains" class="form-control" placeholder="ej: df.cl, elpais.com" value="{{ newsapi_opts.get('domains')|join(', ') if newsapi_opts.get('domains') else '' }}">
@@ -160,32 +360,23 @@
         <h4>Configuración del Clasificador (solo palabras clave)</h4>
         <p class="text-muted">Introduce las palabras clave para cada nivel; separa por saltos de línea o comas.</p>
         <div class="mb-3">
-          <label class="form-label">Palabras clave (Alta)</label>
-          <textarea name="classifier_high_keywords" class="form-control" rows="3">{{ classifier.get('high',{}).get('keywords')|join('\n') if classifier.get('high') else '' }}</textarea>
+          <label class="form-label">Palabras clave (alto)</label>
+          <textarea name="classifier_alto_keywords" class="form-control" rows="3">{{ classifier.get('alto',{}).get('keywords')|join('\n') if classifier.get('alto') else '' }}</textarea>
         </div>
         <div class="mb-3">
-          <label class="form-label">Palabras clave (Media)</label>
-          <textarea name="classifier_medium_keywords" class="form-control" rows="3">{{ classifier.get('medium',{}).get('keywords')|join('\n') if classifier.get('medium') else '' }}</textarea>
+          <label class="form-label">Palabras clave (medio)</label>
+          <textarea name="classifier_medio_keywords" class="form-control" rows="3">{{ classifier.get('medio',{}).get('keywords')|join('\n') if classifier.get('medio') else '' }}</textarea>
         </div>
         <div class="mb-3">
-          <label class="form-label">Palabras clave (Baja)</label>
-          <textarea name="classifier_low_keywords" class="form-control" rows="3">{{ classifier.get('low',{}).get('keywords')|join('\n') if classifier.get('low') else '' }}</textarea>
+          <label class="form-label">Palabras clave (bajo)</label>
+          <textarea name="classifier_bajo_keywords" class="form-control" rows="3">{{ classifier.get('bajo',{}).get('keywords')|join('\n') if classifier.get('bajo') else '' }}</textarea>
         </div>
 
         <div class="col-12">
           <div class="card">
             <div class="card-body">
-              <h5 class="card-title">Contexto y filtros</h5>
-              <p class="text-muted small">Ajusta palabras que ayuden o eviten coincidencias irrelevantes.</p>
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" name="use_context_keywords" id="use_context_keywords" value="1" {% if params.get('use_context_keywords') %}checked{% endif %}>
-                <label class="form-check-label" for="use_context_keywords">Usar palabras de contexto además del clasificador</label>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Palabras de contexto (incluir) — una por línea</label>
-                <textarea name="context_keywords" class="form-control" rows="3">{{ params.get('context_keywords')|join('\n') if params.get('context_keywords') else '' }}</textarea>
-                <div class="form-text">Ej: 'incendio' (sin comillas). Se aplican como OR a las consultas del clasificador.</div>
-              </div>
+              <h5 class="card-title">Filtros</h5>
+              <p class="text-muted small">Evita coincidencias irrelevantes durante el monitoreo.</p>
               <div class="mb-3">
                 <label class="form-label">Palabras a excluir — una por línea</label>
                 <textarea name="exclude_keywords" class="form-control" rows="2">{{ params.get('exclude_keywords')|join('\n') if params.get('exclude_keywords') else '' }}</textarea>
@@ -195,11 +386,775 @@
           </div>
         </div>
 
+        {% set rp = report_cfg if report_cfg is defined and report_cfg else dict() %}
+        {% set report_branding = rp.get('branding', dict()) %}
+        {% set report_manual = rp.get('manual', dict()) %}
+        {% set report_auto = rp.get('auto', dict()) %}
+        {% set report_auto_month_day = report_auto.get('month_day', 1) | int %}
+
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Reportes en 1 clic (PDF/Excel)</h5>
+              <p class="text-muted small">Genera reportes profesionales por fecha, nivel y categoría/palabra clave.</p>
+
+              <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                  <label class="form-label">Nombre de organización</label>
+                  <input type="text" name="report_company_name" class="form-control" value="{{ report_branding.get('company_name','SPAP') }}" placeholder="Ej: Centro de Monitoreo">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Membrete / subtítulo</label>
+                  <input type="text" name="report_letterhead" class="form-control" value="{{ report_branding.get('letterhead','') }}" placeholder="Ej: Reporte ejecutivo de incidencias">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Ruta o URL del logo</label>
+                  <div class="input-group">
+                    <input type="text" name="report_logo_path" id="report_logo_path" class="form-control" value="{{ report_branding.get('logo_path','') }}" placeholder="Ej: assets/logo.png o https://...">
+                    <button type="button" class="btn btn-outline-secondary" id="report_logo_validate_btn">Validar</button>
+                  </div>
+                  <div id="report_logo_validate_result" class="form-text">Puedes usar URL, ruta local o subir archivo.</div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Subir logo (opcional)</label>
+                  <input type="file" name="report_logo_file" id="report_logo_file" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,image/*">
+                  <div class="form-text">Si subes archivo, tendrá prioridad sobre URL/ruta.</div>
+                </div>
+              </div>
+
+              <div class="row g-2 mb-2">
+                <div class="col-md-2">
+                  <label class="form-label">Formato</label>
+                  <select name="manual_report_format" class="form-select">
+                    <option value="pdf" {% if report_manual.get('format','pdf') == 'pdf' %}selected{% endif %}>PDF</option>
+                    <option value="xlsx" {% if report_manual.get('format') == 'xlsx' %}selected{% endif %}>Excel</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Periodo</label>
+                  <select name="manual_report_window" id="manual_report_window" class="form-select">
+                    <option value="todo" {% if report_manual.get('window') == 'todo' %}selected{% endif %}>Todo</option>
+                    <option value="un_mes" {% if report_manual.get('window','una_semana') == 'un_mes' %}selected{% endif %}>Un mes</option>
+                    <option value="una_semana" {% if report_manual.get('window','una_semana') == 'una_semana' %}selected{% endif %}>Una semana</option>
+                    <option value="un_dia" {% if report_manual.get('window') == 'un_dia' %}selected{% endif %}>Un día</option>
+                    <option value="personalizado" {% if report_manual.get('window') == 'personalizado' %}selected{% endif %}>Personalizado</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Desde</label>
+                  <input type="date" name="manual_from_date" id="manual_from_date" class="form-control" value="{{ report_manual.get('from_date','') }}">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Hasta</label>
+                  <input type="date" name="manual_to_date" id="manual_to_date" class="form-control" value="{{ report_manual.get('to_date','') }}">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Categoría</label>
+                  <input type="text" name="manual_category" class="form-control" value="{{ report_manual.get('category','') }}" placeholder="Coincidencia parcial">
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Palabra clave</label>
+                  <input type="text" name="manual_keyword" class="form-control" value="{{ report_manual.get('keyword','') }}" placeholder="Coincidencia en título/resumen">
+                </div>
+              </div>
+              <div class="form-text mb-3">
+                Para Todo, Un mes, Una semana y Un día el rango se calcula automáticamente con Hasta = fecha actual. En Personalizado puedes editar Desde/Hasta manualmente.
+              </div>
+
+              <div class="d-flex gap-2 flex-wrap">
+                <button formaction="/config/report/download" formmethod="post" class="btn btn-outline-primary">Generar y descargar reporte</button>
+                <button formaction="/config/report/send_now" formmethod="post" class="btn btn-outline-success">Generar y enviar ahora a Telegram</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Reporte automático por Telegram</h5>
+              <p class="text-muted small">Programa el envío a números/canales (chat IDs o @usuario).</p>
+
+              <div class="row g-2 mb-3">
+                <div class="col-md-3">
+                  <label class="form-label">Formato</label>
+                  <select name="auto_report_format" class="form-select">
+                    <option value="pdf" {% if report_auto.get('format','pdf') == 'pdf' %}selected{% endif %}>PDF</option>
+                    <option value="xlsx" {% if report_auto.get('format') == 'xlsx' %}selected{% endif %}>Excel</option>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label">Frecuencia</label>
+                  <select name="auto_report_frequency" id="auto_report_frequency" class="form-select">
+                    <option value="diario" {% if report_auto.get('frequency','diario') == 'diario' %}selected{% endif %}>Diario</option>
+                    <option value="semanal" {% if report_auto.get('frequency') == 'semanal' %}selected{% endif %}>Semanal</option>
+                    <option value="mensual" {% if report_auto.get('frequency') == 'mensual' %}selected{% endif %}>Mensual</option>
+                  </select>
+                </div>
+                <div class="col-md-2" id="auto_weekday_wrap">
+                  <label class="form-label">Día semanal</label>
+                  <select name="auto_report_weekday" id="auto_report_weekday" class="form-select">
+                    <option value="lunes" {% if report_auto.get('weekday','lunes') == 'lunes' %}selected{% endif %}>Lunes</option>
+                    <option value="martes" {% if report_auto.get('weekday') == 'martes' %}selected{% endif %}>Martes</option>
+                    <option value="miércoles" {% if report_auto.get('weekday') == 'miércoles' %}selected{% endif %}>Miércoles</option>
+                    <option value="jueves" {% if report_auto.get('weekday') == 'jueves' %}selected{% endif %}>Jueves</option>
+                    <option value="viernes" {% if report_auto.get('weekday') == 'viernes' %}selected{% endif %}>Viernes</option>
+                    <option value="sábado" {% if report_auto.get('weekday') == 'sábado' %}selected{% endif %}>Sábado</option>
+                    <option value="domingo" {% if report_auto.get('weekday') == 'domingo' %}selected{% endif %}>Domingo</option>
+                  </select>
+                </div>
+                <div class="col-md-2" id="auto_monthday_wrap">
+                  <label class="form-label">Día del mes</label>
+                  <select name="auto_report_month_day" id="auto_report_month_day" class="form-select">
+                    {% for d in range(1, 32) %}
+                    <option value="{{ d }}" {% if report_auto_month_day == d %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Hora</label>
+                  <input type="time" name="auto_report_time" class="form-control" value="{{ report_auto.get('time','09:00') }}">
+                </div>
+              </div>
+              <div class="form-text mb-3">
+                El rango Desde/Hasta se calcula automáticamente según la frecuencia. Semanal: del día elegido de la semana pasada al próximo (o actual) día elegido. Diario: último día. Mensual: del día elegido del mes anterior al próximo (o actual) día elegido. Si un mes no tiene ese día, se usa el último del mes.
+              </div>
+
+              <div class="row g-2 mb-2">
+                <div class="col-md-2">
+                  <label class="form-label">Desde</label>
+                  <input type="date" name="auto_from_date" id="auto_from_date" class="form-control" value="{{ report_auto.get('from_date','') }}" readonly>
+                </div>
+                <div class="col-md-2">
+                  <label class="form-label">Hasta</label>
+                  <input type="date" name="auto_to_date" id="auto_to_date" class="form-control" value="{{ report_auto.get('to_date','') }}" readonly>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Categoría</label>
+                  <input type="text" name="auto_category" class="form-control" value="{{ report_auto.get('category','') }}" placeholder="Coincidencia parcial">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Palabra clave</label>
+                  <input type="text" name="auto_keyword" class="form-control" value="{{ report_auto.get('keyword','') }}" placeholder="Coincidencia en título/resumen">
+                </div>
+              </div>
+
+              <div class="alert alert-light border mt-3 mb-0">
+                La activación y los niveles del reporte automático se configuran en la sección <strong>Telegram</strong> con la columna <strong>Auto</strong> y sus niveles.
+              </div>
+            </div>
+          </div>
+        </div>
+
         <button class="btn btn-primary">Guardar configuración</button>
-        <button formaction="/config/send_test_alert" formmethod="post" class="btn btn-outline-secondary ms-2">Enviar prueba Telegram</button>
-        <a href="/" class="btn btn-link">Volver al feed</a>
       </form>
 
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      (function () {
+        const freqSelect = document.getElementById("auto_report_frequency");
+        const weeklyWrap = document.getElementById("auto_weekday_wrap");
+        const monthWrap = document.getElementById("auto_monthday_wrap");
+        const weeklySelect = document.getElementById("auto_report_weekday");
+        const monthSelect = document.getElementById("auto_report_month_day");
+        const fromInput = document.getElementById("auto_from_date");
+        const toInput = document.getElementById("auto_to_date");
+
+        if (!freqSelect || !weeklyWrap || !monthWrap) {
+          return;
+        }
+
+        function formatLocalDate(d) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return y + "-" + m + "-" + day;
+        }
+
+        function todayLocal() {
+          const now = new Date();
+          return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        }
+
+        function addDays(date, deltaDays) {
+          const out = new Date(date.getTime());
+          out.setDate(out.getDate() + deltaDays);
+          return out;
+        }
+
+        function daysInMonth(year, monthIndex) {
+          return new Date(year, monthIndex + 1, 0).getDate();
+        }
+
+        function buildMonthAnchor(year, monthIndex, selectedDay) {
+          const effectiveDay = Math.min(selectedDay, daysInMonth(year, monthIndex));
+          return new Date(year, monthIndex, effectiveDay);
+        }
+
+        function computeAutoRange() {
+          const f = String(freqSelect.value || "diario").toLowerCase();
+          const today = todayLocal();
+
+          if (f === "diario") {
+            return {
+              fromDate: addDays(today, -1),
+              toDate: today,
+            };
+          }
+
+          if (f === "semanal") {
+            const weekdayMap = {
+              "lunes": 1,
+              "martes": 2,
+              "miércoles": 3,
+              "miercoles": 3,
+              "jueves": 4,
+              "viernes": 5,
+              "sábado": 6,
+              "sabado": 6,
+              "domingo": 0,
+            };
+            const selectedWeekday = String((weeklySelect && weeklySelect.value) || "lunes").toLowerCase();
+            const target = Object.prototype.hasOwnProperty.call(weekdayMap, selectedWeekday)
+              ? weekdayMap[selectedWeekday]
+              : 1;
+            const delta = (target - today.getDay() + 7) % 7;
+            const toDate = addDays(today, delta);
+            return {
+              fromDate: addDays(toDate, -7),
+              toDate,
+            };
+          }
+
+          const selectedDay = Math.max(1, Math.min(31, Number((monthSelect && monthSelect.value) || 1)));
+          const thisAnchor = buildMonthAnchor(today.getFullYear(), today.getMonth(), selectedDay);
+          let toDate = thisAnchor;
+          if (today.getTime() > thisAnchor.getTime()) {
+            const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+            toDate = buildMonthAnchor(nextMonth.getFullYear(), nextMonth.getMonth(), selectedDay);
+          }
+          const prevMonth = new Date(toDate.getFullYear(), toDate.getMonth() - 1, 1);
+          const fromDate = buildMonthAnchor(prevMonth.getFullYear(), prevMonth.getMonth(), selectedDay);
+          return { fromDate, toDate };
+        }
+
+        function applyAutoDateRange() {
+          if (!fromInput || !toInput) {
+            return;
+          }
+          const range = computeAutoRange();
+          fromInput.value = formatLocalDate(range.fromDate);
+          toInput.value = formatLocalDate(range.toDate);
+        }
+
+        function syncAutoFrequencyUI() {
+          const f = String(freqSelect.value || "diario").toLowerCase();
+          const isWeekly = f === "semanal";
+          const isMonthly = f === "mensual";
+
+          weeklyWrap.style.display = isWeekly ? "" : "none";
+          monthWrap.style.display = isMonthly ? "" : "none";
+
+          if (weeklySelect) {
+            weeklySelect.disabled = !isWeekly;
+          }
+          if (monthSelect) {
+            monthSelect.disabled = !isMonthly;
+          }
+
+          applyAutoDateRange();
+        }
+
+        freqSelect.addEventListener("change", syncAutoFrequencyUI);
+        if (weeklySelect) {
+          weeklySelect.addEventListener("change", applyAutoDateRange);
+        }
+        if (monthSelect) {
+          monthSelect.addEventListener("change", applyAutoDateRange);
+        }
+        syncAutoFrequencyUI();
+      })();
+    </script>
+    <script>
+      (function () {
+        const windowSelect = document.getElementById("manual_report_window");
+        const fromInput = document.getElementById("manual_from_date");
+        const toInput = document.getElementById("manual_to_date");
+
+        if (!windowSelect || !fromInput || !toInput) {
+          return;
+        }
+
+        function formatLocalDate(d) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return y + "-" + m + "-" + day;
+        }
+
+        function todayLocal() {
+          const now = new Date();
+          return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        }
+
+        function addDays(date, deltaDays) {
+          const out = new Date(date.getTime());
+          out.setDate(out.getDate() + deltaDays);
+          return out;
+        }
+
+        function applyManualWindow() {
+          const windowValue = (windowSelect.value || "una_semana").toLowerCase();
+
+          if (windowValue === "personalizado") {
+            fromInput.readOnly = false;
+            toInput.readOnly = false;
+            return;
+          }
+
+          const today = todayLocal();
+          let fromDateValue = "";
+
+          if (windowValue === "un_mes") {
+            fromDateValue = formatLocalDate(addDays(today, -30));
+          } else if (windowValue === "una_semana") {
+            fromDateValue = formatLocalDate(addDays(today, -7));
+          } else if (windowValue === "un_dia") {
+            fromDateValue = formatLocalDate(addDays(today, -1));
+          }
+
+          fromInput.value = fromDateValue;
+          toInput.value = formatLocalDate(today);
+          fromInput.readOnly = true;
+          toInput.readOnly = true;
+        }
+
+        windowSelect.addEventListener("change", applyManualWindow);
+        applyManualWindow();
+      })();
+    </script>
+    <script>
+      (function () {
+        const logoInput = document.getElementById("report_logo_path");
+        const logoFile = document.getElementById("report_logo_file");
+        const validateBtn = document.getElementById("report_logo_validate_btn");
+        const resultEl = document.getElementById("report_logo_validate_result");
+
+        if (!logoInput || !validateBtn || !resultEl) {
+          return;
+        }
+
+        function setResult(message, tone) {
+          resultEl.textContent = message;
+          resultEl.classList.remove("text-success", "text-danger", "text-warning", "text-muted");
+          if (tone === "success") {
+            resultEl.classList.add("text-success");
+            return;
+          }
+          if (tone === "danger") {
+            resultEl.classList.add("text-danger");
+            return;
+          }
+          if (tone === "warning") {
+            resultEl.classList.add("text-warning");
+            return;
+          }
+          resultEl.classList.add("text-muted");
+        }
+
+        validateBtn.addEventListener("click", async function () {
+          const ref = String(logoInput.value || "").trim();
+          if (!ref) {
+            setResult("Ingresa una URL o ruta para validar.", "warning");
+            return;
+          }
+
+          setResult("Validando...", "muted");
+          try {
+            const res = await fetch("/api/report/logo/check?ref=" + encodeURIComponent(ref), {
+              headers: { "Accept": "application/json" },
+            });
+            const payload = await res.json();
+
+            if (payload && payload.exists) {
+              setResult("Logo válido. " + String(payload.detail || ""), "success");
+              return;
+            }
+
+            setResult("No se pudo validar. " + String((payload && payload.detail) || ""), "danger");
+          } catch (e) {
+            setResult("Error validando logo.", "danger");
+          }
+        });
+
+        if (logoFile) {
+          logoFile.addEventListener("change", function () {
+            const hasFile = !!(logoFile.files && logoFile.files.length > 0);
+            if (hasFile) {
+              setResult("Archivo seleccionado. Se usará al guardar o generar reporte.", "success");
+            }
+          });
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        const countrySelect = document.getElementById("location_country_select");
+        const stateSelect = document.getElementById("location_state_select");
+        const municipalitySelect = document.getElementById("location_municipality_select");
+
+        if (!countrySelect || !stateSelect || !municipalitySelect) {
+          return;
+        }
+
+        const initialCountry = countrySelect.dataset.initial || "";
+        const initialState = stateSelect.dataset.initial || "";
+        const initialMunicipality = municipalitySelect.dataset.initial || "";
+
+        function normalizeItems(payload) {
+          if (!payload || !Array.isArray(payload.items)) {
+            return [];
+          }
+          return payload.items
+            .map((item) => {
+              if (typeof item === "string") {
+                return { value: item, label: item };
+              }
+              const value = String(item.value ?? item.label ?? "").trim();
+              const label = String(item.label ?? item.value ?? "").trim();
+              return { value, label };
+            })
+            .filter((item) => item.label);
+        }
+
+        function setOptions(select, items, selectedValue, placeholderText) {
+          let normalized = Array.isArray(items) ? items.slice() : [];
+
+          if (selectedValue && !normalized.some((it) => it.value === selectedValue)) {
+            normalized.unshift({ value: selectedValue, label: selectedValue });
+          }
+
+          const frag = document.createDocumentFragment();
+          if (placeholderText !== null) {
+            const op = document.createElement("option");
+            op.value = "";
+            op.textContent = placeholderText;
+            frag.appendChild(op);
+          }
+
+          normalized.forEach((item) => {
+            const op = document.createElement("option");
+            op.value = item.value;
+            op.textContent = item.label;
+            if (item.value === selectedValue) {
+              op.selected = true;
+            }
+            frag.appendChild(op);
+          });
+
+          select.innerHTML = "";
+          select.appendChild(frag);
+
+          if (!selectedValue && select.options.length > 0) {
+            select.selectedIndex = 0;
+          }
+        }
+
+        async function fetchCatalog(url) {
+          const res = await fetch(url, { headers: { "Accept": "application/json" } });
+          if (!res.ok) {
+            throw new Error("HTTP " + res.status);
+          }
+          return res.json();
+        }
+
+        async function loadMunicipalities(country, state, selectedValue) {
+          if (!country || !state) {
+            municipalitySelect.disabled = true;
+            setOptions(municipalitySelect, [], "", "Selecciona estado/provincia");
+            return;
+          }
+          municipalitySelect.disabled = false;
+          try {
+            const payload = await fetchCatalog(
+              "/api/geo/municipalities?country=" + encodeURIComponent(country) + "&state=" + encodeURIComponent(state)
+            );
+            const items = normalizeItems(payload);
+            setOptions(municipalitySelect, items, selectedValue, "(Opcional)");
+          } catch (e) {
+            setOptions(municipalitySelect, [], selectedValue, "No disponible");
+          }
+        }
+
+        async function loadStates(country, selectedValue, municipalityValue) {
+          if (!country) {
+            stateSelect.disabled = true;
+            municipalitySelect.disabled = true;
+            setOptions(stateSelect, [], "", "Selecciona país primero");
+            setOptions(municipalitySelect, [], "", "Selecciona estado/provincia");
+            return;
+          }
+          stateSelect.disabled = false;
+          try {
+            const payload = await fetchCatalog("/api/geo/states?country=" + encodeURIComponent(country));
+            const items = normalizeItems(payload);
+            setOptions(stateSelect, items, selectedValue, "(Opcional)");
+          } catch (e) {
+            setOptions(stateSelect, [], selectedValue, "No disponible");
+          }
+          await loadMunicipalities(country, stateSelect.value || selectedValue, municipalityValue);
+        }
+
+        async function loadCountries() {
+          try {
+            const payload = await fetchCatalog("/api/geo/countries");
+            const items = normalizeItems(payload);
+            setOptions(countrySelect, items, initialCountry, null);
+          } catch (e) {
+            setOptions(countrySelect, [{ value: "", label: "Mundo" }], initialCountry, null);
+          }
+          await loadStates(countrySelect.value || initialCountry, initialState, initialMunicipality);
+        }
+
+        countrySelect.addEventListener("change", async function () {
+          await loadStates(countrySelect.value, "", "");
+        });
+
+        stateSelect.addEventListener("change", async function () {
+          await loadMunicipalities(countrySelect.value, stateSelect.value, "");
+        });
+
+        loadCountries();
+      })();
+    </script>
+    <script>
+      (function () {
+        const tbody = document.getElementById("telegram_targets_tbody");
+        const addBtn = document.getElementById("add_telegram_target_row");
+        if (!tbody || !addBtn) {
+          return;
+        }
+
+        function nextIndex() {
+          let maxIdx = -1;
+          tbody.querySelectorAll("[data-row]").forEach((row) => {
+            const n = Number(row.getAttribute("data-row") || "0");
+            if (!Number.isNaN(n) && n > maxIdx) {
+              maxIdx = n;
+            }
+          });
+          return maxIdx + 1;
+        }
+
+        function buildRowHtml(idx) {
+          return [
+            '<div class="accordion-item border rounded mb-2" data-row="' + idx + '">',
+            '  <h2 class="accordion-header" id="tg_head_' + idx + '">',
+            '    <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#tg_body_' + idx + '" aria-expanded="false" aria-controls="tg_body_' + idx + '">',
+            '      <div class="w-100 d-flex flex-wrap align-items-center gap-2">',
+            '        <span class="fw-semibold tg-row-title">Chat ' + (idx + 1) + '</span>',
+            '        <span class="text-muted small tg-row-chat">sin chat</span>',
+            '        <span class="ms-auto badge tg-status-badge text-bg-success">Activo</span>',
+            '      </div>',
+            '    </button>',
+            '  </h2>',
+            '  <div id="tg_body_' + idx + '" class="accordion-collapse collapse" aria-labelledby="tg_head_' + idx + '" data-bs-parent="#telegram_targets_tbody">',
+            '    <div class="accordion-body pt-2">',
+            '      <input type="hidden" name="tg_row_idx" value="' + idx + '">',
+            '      <div class="row g-2">',
+            '        <div class="col-12 col-xl-5">',
+            '          <label class="form-label mb-1 small">Chat</label>',
+            '          <input type="text" name="tg_chat_' + idx + '" class="form-control form-control-sm" placeholder="@canal, -100..., t.me/...">',
+            '          <label class="form-label mt-2 mb-1 small">Etiqueta (opcional)</label>',
+            '          <input type="text" name="tg_label_' + idx + '" class="form-control form-control-sm" placeholder="Ej. Operaciones">',
+            '        </div>',
+            '        <div class="col-12 col-xl-7">',
+            '          <div class="row g-2">',
+            '            <div class="col-12 col-md-4">',
+            '              <div class="border rounded p-2 h-100">',
+            '                <div class="form-check form-switch mb-2">',
+            '                  <input class="form-check-input" type="checkbox" name="tg_alert_enabled_' + idx + '" value="1" checked>',
+            '                  <label class="form-check-label">Alertas</label>',
+            '                </div>',
+            '                <div class="d-flex gap-2 flex-wrap ps-1">',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_alto_' + idx + '" value="1" checked><label class="form-check-label small">alto</label></div>',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_medio_' + idx + '" value="1"><label class="form-check-label small">medio</label></div>',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_bajo_' + idx + '" value="1"><label class="form-check-label small">bajo</label></div>',
+            '                </div>',
+            '              </div>',
+            '            </div>',
+            '            <div class="col-12 col-md-4">',
+            '              <div class="border rounded p-2 h-100">',
+            '                <div class="form-check form-switch mb-2">',
+            '                  <input class="form-check-input" type="checkbox" name="tg_rep_manual_enabled_' + idx + '" value="1" checked>',
+            '                  <label class="form-check-label">Reporte 1 clic</label>',
+            '                </div>',
+            '                <div class="d-flex gap-2 flex-wrap ps-1">',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_manual_alto_' + idx + '" value="1" checked><label class="form-check-label small">alto</label></div>',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_manual_medio_' + idx + '" value="1" checked><label class="form-check-label small">medio</label></div>',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_manual_bajo_' + idx + '" value="1" checked><label class="form-check-label small">bajo</label></div>',
+            '                </div>',
+            '              </div>',
+            '            </div>',
+            '            <div class="col-12 col-md-4">',
+            '              <div class="border rounded p-2 h-100">',
+            '                <div class="form-check form-switch mb-2">',
+            '                  <input class="form-check-input" type="checkbox" name="tg_rep_auto_enabled_' + idx + '" value="1">',
+            '                  <label class="form-check-label">Reporte automático</label>',
+            '                </div>',
+            '                <div class="d-flex gap-2 flex-wrap ps-1">',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_auto_alto_' + idx + '" value="1" checked><label class="form-check-label small">alto</label></div>',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_auto_medio_' + idx + '" value="1" checked><label class="form-check-label small">medio</label></div>',
+            '                  <div class="form-check"><input class="form-check-input" type="checkbox" name="tg_rep_auto_bajo_' + idx + '" value="1" checked><label class="form-check-label small">bajo</label></div>',
+            '                </div>',
+            '              </div>',
+            '            </div>',
+            '          </div>',
+            '        </div>',
+            '        <div class="col-12 d-flex justify-content-between align-items-center border-top pt-2 mt-1">',
+            '          <div>',
+            '            <div class="form-check form-switch d-inline-block">',
+            '              <input class="form-check-input" type="checkbox" name="tg_enabled_' + idx + '" value="1" checked>',
+            '              <label class="form-check-label">Chat activo</label>',
+            '            </div>',
+            '            <div class="small text-muted">si está apagado, no envía nada</div>',
+            '          </div>',
+            '          <button type="button" class="btn btn-outline-danger btn-sm remove-telegram-row">Quitar</button>',
+            '        </div>',
+            '      </div>',
+            '    </div>',
+            '  </div>',
+            '</div>',
+          ].join("");
+        }
+
+        function updateRowHeader(row) {
+          const idx = row.getAttribute("data-row");
+          if (!idx) {
+            return;
+          }
+          const labelInput = row.querySelector('[name="tg_label_' + idx + '"]');
+          const chatInput = row.querySelector('[name="tg_chat_' + idx + '"]');
+          const enabledInput = row.querySelector('[name="tg_enabled_' + idx + '"]');
+          const titleEl = row.querySelector(".tg-row-title");
+          const chatEl = row.querySelector(".tg-row-chat");
+          const badgeEl = row.querySelector(".tg-status-badge");
+
+          const labelTxt = (labelInput && labelInput.value ? labelInput.value.trim() : "") || ("Chat " + (Number(idx) + 1));
+          const chatTxt = (chatInput && chatInput.value ? chatInput.value.trim() : "") || "sin chat";
+          const isEnabled = !!(enabledInput && enabledInput.checked);
+
+          if (titleEl) {
+            titleEl.textContent = labelTxt;
+          }
+          if (chatEl) {
+            chatEl.textContent = chatTxt;
+          }
+          if (badgeEl) {
+            badgeEl.textContent = isEnabled ? "Activo" : "Inactivo";
+            badgeEl.classList.remove("text-bg-success", "text-bg-secondary");
+            badgeEl.classList.add(isEnabled ? "text-bg-success" : "text-bg-secondary");
+          }
+        }
+
+        function setDisabled(row, selector, disabled) {
+          row.querySelectorAll(selector).forEach((el) => {
+            el.disabled = disabled;
+          });
+        }
+
+        function syncRowModeState(row) {
+          const idx = row.getAttribute("data-row");
+          if (!idx) {
+            return;
+          }
+
+          const alertToggle = row.querySelector('[name="tg_alert_enabled_' + idx + '"]');
+          const manualToggle = row.querySelector('[name="tg_rep_manual_enabled_' + idx + '"]');
+          const autoToggle = row.querySelector('[name="tg_rep_auto_enabled_' + idx + '"]');
+
+          const alertEnabled = !!(alertToggle && alertToggle.checked);
+          const manualEnabled = !!(manualToggle && manualToggle.checked);
+          const autoEnabled = !!(autoToggle && autoToggle.checked);
+
+          setDisabled(row, '[name="tg_alto_' + idx + '"], [name="tg_medio_' + idx + '"], [name="tg_bajo_' + idx + '"]', !alertEnabled);
+          setDisabled(row, '[name="tg_rep_manual_alto_' + idx + '"], [name="tg_rep_manual_medio_' + idx + '"], [name="tg_rep_manual_bajo_' + idx + '"]', !manualEnabled);
+          setDisabled(row, '[name="tg_rep_auto_alto_' + idx + '"], [name="tg_rep_auto_medio_' + idx + '"], [name="tg_rep_auto_bajo_' + idx + '"]', !autoEnabled);
+        }
+
+        addBtn.addEventListener("click", function () {
+          const idx = nextIndex();
+          tbody.insertAdjacentHTML("beforeend", buildRowHtml(idx));
+          const row = tbody.querySelector('[data-row="' + idx + '"]');
+          if (row) {
+            syncRowModeState(row);
+            updateRowHeader(row);
+          }
+        });
+
+        tbody.querySelectorAll("[data-row]").forEach((row) => {
+          syncRowModeState(row);
+          updateRowHeader(row);
+        });
+
+        tbody.addEventListener("click", function (ev) {
+          const target = ev.target;
+          if (!(target instanceof Element)) {
+            return;
+          }
+          if (!target.classList.contains("remove-telegram-row")) {
+            return;
+          }
+          const row = target.closest("[data-row]");
+          if (!row) {
+            return;
+          }
+          row.remove();
+        });
+
+        tbody.addEventListener("change", function (ev) {
+          const target = ev.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          const row = target.closest("[data-row]");
+          if (!row) {
+            return;
+          }
+          const name = target.name || "";
+          if (
+            name.startsWith("tg_alert_enabled_") ||
+            name.startsWith("tg_rep_manual_enabled_") ||
+            name.startsWith("tg_rep_auto_enabled_")
+          ) {
+            syncRowModeState(row);
+          }
+          if (
+            name.startsWith("tg_label_") ||
+            name.startsWith("tg_chat_") ||
+            name.startsWith("tg_enabled_")
+          ) {
+            updateRowHeader(row);
+          }
+        });
+
+        tbody.addEventListener("input", function (ev) {
+          const target = ev.target;
+          if (!(target instanceof HTMLInputElement)) {
+            return;
+          }
+          const name = target.name || "";
+          if (!name.startsWith("tg_label_") && !name.startsWith("tg_chat_")) {
+            return;
+          }
+          const row = target.closest("[data-row]");
+          if (!row) {
+            return;
+          }
+          updateRowHeader(row);
+        });
+      })();
+    </script>
   </body>
 </html>

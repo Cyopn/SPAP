@@ -8,7 +8,7 @@
   </head>
   <body class="bg-light">
     {% include 'navbar.html' %}
-    <div class="container py-5">
+    <div class="container py-3">
       <h1 class="mb-4">Alertas enviadas</h1>
 
       {% if target %}
@@ -22,37 +22,28 @@
           No hay alertas registradas (items con <code>tg_message_id</code>).
         </div>
       {% else %}
-        <table class="table table-striped">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Nivel</th>
-              <th>Título</th>
-              <th>tg_message_id</th>
-              <th>Enlace</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for a in alerts %}
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
               <tr>
-                <td>{{ a.id }}</td>
-                <td>{{ a.level }}</td>
-                <td>{{ a.title }}</td>
-                <td>{{ a.tg_message_id }}</td>
-                <td>
-                  {% if username and a.tg_message_id %}
-                    <a href="https://t.me/{{ username }}/{{ a.tg_message_id }}" target="_blank">Abrir en Telegram</a>
-                  {% else %}
-                    -
-                  {% endif %}
-                </td>
+                <th>ID</th>
+                <th>Nivel</th>
+                <th>Título</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for a in alerts %}
+                <tr>
+                  <td>{{ a.id }}</td>
+                  <td>{{ a.level }}</td>
+                  <td>{{ a.title }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endif %}
 
-      <a href="/config" class="btn btn-link">Volver a configuración</a>
     </div>
   </body>
 </html>
