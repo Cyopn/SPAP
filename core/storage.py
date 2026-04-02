@@ -9,7 +9,7 @@ DB_PATH = "pa_feed.db"
 
 
 def _connect():
-    return sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+    return sqlite3.connect(DB_PATH)
 
 
 def _to_bool(value: Any, default: bool = False) -> bool:
