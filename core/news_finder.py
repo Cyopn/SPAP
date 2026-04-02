@@ -5,7 +5,7 @@ import json
 import os
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable, Iterable
 from urllib.parse import quote_plus
@@ -124,6 +124,21 @@ def _country_to_code(name: str | None) -> str | None:
     if len(val) == 2 and val.isalpha():
         return val.lower()
     return None
+
+
+def _as_bool(value: object, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return bool(value)
+    txt = str(value).strip().lower()
+    if txt in ("1", "true", "t", "yes", "y", "on", "si", "sí"):
+        return True
+    if txt in ("0", "false", "f", "no", "n", "off"):
+        return False
+    return default
 
 
 def search_google_news(keyword: str, limit: int) -> list[NewsItem]:
@@ -245,27 +260,95 @@ def search_hacker_news(keyword: str, limit: int) -> list[NewsItem]:
     return items
 
 
-def search_x(keyword: str, limit: int, bearer_token: str | None = None) -> list[NewsItem]:
+def search_x(
+    keyword: str,
+    limit: int,
+    bearer_token: str | None = None,
+    options: dict | None = None,
+    *,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> list[NewsItem]:
+    options = options if isinstance(options, dict) else {}
     raw_query = keyword or ""
     if not str(raw_query).strip():
         log("news_finder: search_x skipped because keyword is empty", "INFO")
         return []
     if not bearer_token:
         raise ValueError("No X bearer token provided")
-    encoded = quote_plus(raw_query)
+
+    query = str(raw_query).strip()
+    suffix = str(options.get("query_suffix") or "").strip()
+    if suffix:
+        query = f"{query} {suffix}".strip()
+
+    x_lang = str(options.get("lang") or options.get(
+        "language") or "").strip().lower()
+    if x_lang and f"lang:{x_lang}" not in query.lower():
+        query = f"{query} lang:{x_lang}".strip()
+
+    exclude_retweets = _as_bool(options.get("exclude_retweets"), True)
+    exclude_replies = _as_bool(options.get("exclude_replies"), False)
+
+    ql = query.lower()
+    if exclude_retweets and "-is:retweet" not in ql:
+        query = f"{query} -is:retweet".strip()
+    if exclude_replies and "-is:reply" not in ql:
+        query = f"{query} -is:reply".strip()
+
     try:
-        url_preview = (
-            "https://api.twitter.com/2/tweets/search/recent"
-            f"?query={encoded}&tweet.fields=created_at,text&max_results={max(1, min(limit, 100))}"
+        max_results_opt = int(options.get("max_results") or 0)
+    except Exception:
+        max_results_opt = 0
+    requested = max_results_opt if max_results_opt > 0 else int(limit or 10)
+    max_results = max(10, min(requested, 100))
+
+    params: dict[str, str | int] = {
+        "query": query,
+        "tweet.fields": "created_at,text,lang",
+        "max_results": max_results,
+    }
+
+    sort_order = str(options.get("sort_order") or "").strip().lower()
+    if sort_order in ("recency", "relevancy"):
+        params["sort_order"] = sort_order
+
+    def _to_x_iso(dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        try:
+            parsed = dt
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=MX_TZ)
+            return (
+                parsed
+                .astimezone(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+        except Exception:
+            return None
+
+    start_time = _to_x_iso(window_start)
+    end_time = _to_x_iso(window_end)
+    if start_time:
+        params["start_time"] = start_time
+    if end_time:
+        params["end_time"] = end_time
+
+    encoded = "&".join(
+        f"{quote_plus(str(k))}={quote_plus(str(v))}"
+        for k, v in params.items()
+    )
+    url = f"https://api.twitter.com/2/tweets/search/recent?{encoded}"
+    try:
+        log(
+            f"news_finder: search_x raw='{raw_query}' query='{query}' max_results={max_results} url='{url}'",
+            "INFO",
         )
-        log(f"news_finder: search_x raw='{raw_query}' encoded='{encoded}' url='{url_preview}'", "INFO")
     except Exception:
         pass
-    max_results = max(1, min(limit, 100))
-    url = (
-        "https://api.twitter.com/2/tweets/search/recent"
-        f"?query={encoded}&tweet.fields=created_at,text&max_results={max_results}"
-    )
     headers = {"Authorization": f"Bearer {bearer_token}",
                "User-Agent": DEFAULT_USER_AGENT}
     payload = _request_json(url, headers=headers)
@@ -709,8 +792,20 @@ def search_all_sources(
     except Exception:
         window_end_utc = None
 
-    sources = cfg_global.get("sources") or list(build_sources_map().keys())
-    sources = [s for s in (sources or []) if (s or "").lower() != "reddit"]
+    raw_sources = (
+        cfg_global.get("sources")
+        or cfg_global.get("sources_monitor")
+        or cfg_global.get("sources_bot")
+        or list(build_sources_map().keys())
+    )
+    sources: list[str] = []
+    seen_sources: set[str] = set()
+    for raw_s in (raw_sources or []):
+        src = str(raw_s or "").strip().lower()
+        if not src or src == "reddit" or src in seen_sources:
+            continue
+        seen_sources.add(src)
+        sources.append(src)
 
     use_location_filter = True
 
@@ -885,11 +980,25 @@ def search_all_sources(
                         continue
                 continue
 
-            if s == "x" and tokens.get("x"):
+            if s == "x":
+                if not tokens.get("x"):
+                    try:
+                        log("news_finder: source 'x' selected but X_BEARER_TOKEN is missing", "WARNING")
+                    except Exception:
+                        pass
+                    continue
+
+                x_opts = (cfg_global.get("source_options") or {}).get("x", {})
                 for q in (query_variants or ([user_keyword] if user_keyword else []))[:3]:
                     try:
-                        found = search_x(q, source_page_limit,
-                                         tokens.get("x")) or []
+                        found = search_x(
+                            q,
+                            source_page_limit,
+                            tokens.get("x"),
+                            options=x_opts,
+                            window_start=window_start_utc,
+                            window_end=window_end_utc,
+                        ) or []
                         for f in found:
                             try:
                                 setattr(f, "matched_query", q)

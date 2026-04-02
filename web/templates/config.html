@@ -29,25 +29,44 @@
                 <p class="text-muted small">Selecciona las fuentes a consultar y ajusta frecuencia y volumen.</p>
                 <div class="row">
                   <div class="col-md-6">
-                    <label class="form-label">Fuentes</label>
+                    <label class="form-label">Fuentes del monitor</label>
+                    <input type="hidden" name="sources_monitor_present" value="1">
                     <div class="d-flex flex-wrap gap-2">
                       {% for s in sources %}
                       <div class="form-check">
-                        {% if s in params.sources %}
-                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources" id="src_{{ s }}" checked>
+                        {% if s in params.sources_monitor %}
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources_monitor" id="src_monitor_{{ s }}" checked>
                         {% else %}
-                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources" id="src_{{ s }}">
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources_monitor" id="src_monitor_{{ s }}">
                         {% endif %}
-                        <label class="form-check-label" for="src_{{s}}">{{s}}</label>
+                        <label class="form-check-label" for="src_monitor_{{s}}">{{s}}</label>
                       </div>
                       {% endfor %}
                     </div>
+                    <div class="form-text">Se usan en el monitoreo automático continuo.</div>
                   </div>
-                  <div class="col-md-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Fuentes del bot</label>
+                    <input type="hidden" name="sources_bot_present" value="1">
+                    <div class="d-flex flex-wrap gap-2">
+                      {% for s in sources %}
+                      <div class="form-check">
+                        {% if s in params.sources_bot %}
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources_bot" id="src_bot_{{ s }}" checked>
+                        {% else %}
+                        <input class="form-check-input" type="checkbox" value="{{ s }}" name="sources_bot" id="src_bot_{{ s }}">
+                        {% endif %}
+                        <label class="form-check-label" for="src_bot_{{s}}">{{s}}</label>
+                      </div>
+                      {% endfor %}
+                    </div>
+                    <div class="form-text">Se usan cuando el bot hace búsquedas manuales por palabra clave.</div>
+                  </div>
+                  <div class="col-md-3 mt-3">
                     <label class="form-label">Límite por fuente</label>
                     <input type="number" name="limit" class="form-control" value="{{ params.limit }}" placeholder="Máx. resultados por fuente">
                   </div>
-                  <div class="col-md-3">
+                  <div class="col-md-3 mt-3">
                     <label class="form-label">Intervalo (min)</label>
                     <input type="number" name="interval_minutes" class="form-control" value="{{ params.interval_minutes }}" placeholder="Cada cuántos minutos buscar">
                   </div>
@@ -355,6 +374,50 @@
               </div>
             </div>
             <small class="text-muted">Si no rellenás nada, se usarán los valores predeterminados del adaptador.</small>
+          </div>
+        </div>
+        <div class="card mb-3">
+          {% set x_opts = params.get('source_options', dict()).get('x', dict()) %}
+          <div class="card-body">
+            <h5 class="card-title">X / Twitter</h5>
+            <p class="text-muted small mb-2">Requiere X_BEARER_TOKEN en el entorno para funcionar.</p>
+            <div class="mb-2">
+              <label class="form-label">Texto adicional de búsqueda (query suffix)</label>
+              <input type="text" name="x_query_suffix" class="form-control" placeholder="ej: (seguridad OR alerta)" value="{{ x_opts.get('query_suffix','') }}">
+            </div>
+            <div class="mb-2 row">
+              <div class="col-md-3">
+                <label class="form-label">Idioma</label>
+                <select name="x_language" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="es" {% if x_opts.get('lang')=='es' %}selected{% endif %}>Español (es)</option>
+                  <option value="en" {% if x_opts.get('lang')=='en' %}selected{% endif %}>Inglés (en)</option>
+                  <option value="pt" {% if x_opts.get('lang')=='pt' %}selected{% endif %}>Portugués (pt)</option>
+                  <option value="fr" {% if x_opts.get('lang')=='fr' %}selected{% endif %}>Francés (fr)</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Orden</label>
+                <select name="x_sort_order" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="recency" {% if x_opts.get('sort_order')=='recency' %}selected{% endif %}>Más recientes</option>
+                  <option value="relevancy" {% if x_opts.get('sort_order')=='relevancy' %}selected{% endif %}>Relevancia</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Máx por petición</label>
+                <input type="number" name="x_max_results" class="form-control" min="10" max="100" value="{{ x_opts.get('max_results','') }}">
+              </div>
+            </div>
+            <div class="mb-2 form-check">
+              <input class="form-check-input" type="checkbox" name="x_exclude_retweets" id="x_exclude_retweets" value="1" {% if x_opts.get('exclude_retweets', true) %}checked{% endif %}>
+              <label class="form-check-label" for="x_exclude_retweets">Excluir retweets</label>
+            </div>
+            <div class="mb-2 form-check">
+              <input class="form-check-input" type="checkbox" name="x_exclude_replies" id="x_exclude_replies" value="1" {% if x_opts.get('exclude_replies', false) %}checked{% endif %}>
+              <label class="form-check-label" for="x_exclude_replies">Excluir respuestas</label>
+            </div>
+            <small class="text-muted">Estas opciones se aplican al monitor y al bot cuando la fuente X está habilitada.</small>
           </div>
         </div>
         <h4>Configuración del Clasificador (solo palabras clave)</h4>

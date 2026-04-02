@@ -254,6 +254,29 @@ def clear_state(chat_id: str) -> None:
         storage.clear_state(chat_id)
     except Exception:
         pass
+
+
+def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in (raw_sources or []):
+        src = str(raw or "").strip().lower()
+        if not src or src == "reddit" or src in seen:
+            continue
+        seen.add(src)
+        out.append(src)
+    if out:
+        return out
+    return list(fallback or ["google", "bing", "hn"])
+
+
+def _resolve_bot_sources(cfg: dict[str, Any] | None) -> list[str]:
+    if not isinstance(cfg, dict):
+        return ["google", "bing", "hn"]
+    return _normalize_source_list(
+        cfg.get("sources_bot") or cfg.get("sources") or [],
+        fallback=["google", "bing", "hn"],
+    )
     try:
         t = _state_timers.pop(str(chat_id), None)
         if t:
@@ -273,49 +296,114 @@ def perform_search(keyword: str, sources: list[str], limit: int) -> list[dict]:
 
     try:
         cfg_local = dict(cfg_global)
-        cfg_local["sources"] = [
-            s for s in (sources or cfg_global.get("sources") or [])
-            if (s or "").lower() != "reddit"
-        ]
+        cfg_local["sources"] = _normalize_source_list(
+            sources or _resolve_bot_sources(cfg_global),
+            fallback=["google", "bing", "hn"],
+        )
     except Exception:
         cfg_local = cfg_global or {}
 
-    try:
-        safe_limit = max(1, min(int(limit or 10), 10))
-    except Exception:
-        safe_limit = 10
+    safe_limit = 10
+
+    selected_sources = _normalize_source_list(
+        sources or _resolve_bot_sources(cfg_local),
+        fallback=["google", "bing", "hn"],
+    )
 
     now_local = now_mx()
     start_today_utc = now_local.replace(
         hour=0, minute=0, second=0, microsecond=0)
     week_start_utc = now_local - timedelta(days=7)
 
-    try:
-        today_results = search_all_sources(
-            limit=safe_limit,
-            keyword=keyword,
-            cfg=cfg_local,
-            window_start=start_today_utc,
-            window_end=now_local,
-            strict_window=True,
-            include_location_only_when_keyword=False,
-            prefer_specific_location_first=True,
-            keyword_with_location_only=True,
+    def _item_signature(it: dict) -> tuple[str, str]:
+        return (
+            str((it or {}).get("title") or "").strip().lower(),
+            str((it or {}).get("url") or "").strip().lower(),
         )
+
+    def _search_balanced_window(window_start, window_end) -> list[dict]:
+        if not selected_sources:
+            return []
+
+        source_count = max(1, len(selected_sources))
+        base_target = safe_limit // source_count
+        remainder = safe_limit % source_count
+
+        source_target: dict[str, int] = {}
+        source_hits: dict[str, list[dict]] = {}
+
+        for idx, src in enumerate(selected_sources):
+            target_for_source = base_target + (1 if idx < remainder else 0)
+            target_for_source = max(1, target_for_source)
+            fetch_for_source = min(
+                30, max(target_for_source * 2, target_for_source + 2))
+            source_target[src] = target_for_source
+
+            try:
+                cfg_source = dict(cfg_local)
+                cfg_source["sources"] = [src]
+                found = search_all_sources(
+                    limit=fetch_for_source,
+                    keyword=keyword,
+                    cfg=cfg_source,
+                    window_start=window_start,
+                    window_end=window_end,
+                    strict_window=True,
+                    include_location_only_when_keyword=False,
+                    prefer_specific_location_first=True,
+                    keyword_with_location_only=True,
+                )
+                source_hits[src] = found or []
+            except Exception:
+                source_hits[src] = []
+
+        merged: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        leftovers: dict[str, list[dict]] = {}
+
+        for src in selected_sources:
+            picked = 0
+            leftovers[src] = []
+            for it in source_hits.get(src, []):
+                sig = _item_signature(it)
+                if sig in seen:
+                    continue
+                if picked < source_target.get(src, 1):
+                    seen.add(sig)
+                    merged.append(it)
+                    picked += 1
+                    if len(merged) >= safe_limit:
+                        return merged[:safe_limit]
+                else:
+                    leftovers[src].append(it)
+
+        while len(merged) < safe_limit:
+            progressed = False
+            for src in selected_sources:
+                lst = leftovers.get(src) or []
+                while lst:
+                    candidate = lst.pop(0)
+                    sig = _item_signature(candidate)
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    merged.append(candidate)
+                    progressed = True
+                    break
+                leftovers[src] = lst
+                if len(merged) >= safe_limit:
+                    break
+            if not progressed:
+                break
+
+        return merged[:safe_limit]
+
+    try:
+        today_results = _search_balanced_window(start_today_utc, now_local)
         if today_results:
             return today_results[:safe_limit]
 
-        week_results = search_all_sources(
-            limit=safe_limit,
-            keyword=keyword,
-            cfg=cfg_local,
-            window_start=week_start_utc,
-            window_end=now_local,
-            strict_window=True,
-            include_location_only_when_keyword=False,
-            prefer_specific_location_first=True,
-            keyword_with_location_only=True,
-        )
+        week_results = _search_balanced_window(week_start_utc, now_local)
         return week_results[:safe_limit]
     except Exception as e:
         log_exc(f"telegram_bot: search_all_sources failed: {e}", e)
@@ -339,7 +427,7 @@ def _format_pub_date(pub_str: str) -> str:
             return ""
 
 
-def _render_search_page(results: list[dict], page_idx: int, keyword: str, search_id: str, page_size: int = 5):
+def _render_search_page(results: list[dict], page_idx: int, keyword: str, search_id: str, page_size: int = 10):
     start = page_idx * page_size
     end = start + page_size
     page_items = results[start:end]
@@ -350,6 +438,9 @@ def _render_search_page(results: list[dict], page_idx: int, keyword: str, search
         abs_idx = start + offset
         sel_row.append(
             {"text": f"{abs_idx+1}", "callback_data": f"select:{search_id}:{abs_idx}"})
+        if len(sel_row) == 5:
+            keyboard.append(sel_row)
+            sel_row = []
     if sel_row:
         keyboard.append(sel_row)
 
@@ -406,7 +497,7 @@ def _render_search_page(results: list[dict], page_idx: int, keyword: str, search
 
 
 def send_inline_search_results(chat_id: str, keyword: str, results: list[dict]):
-    PAGE_SIZE = 5
+    PAGE_SIZE = 10
     page = 0
     search_id = str(int(time.time() * 1000))
     enriched_results: list[dict] = []
@@ -579,11 +670,6 @@ def _handle_callback_query(cq: dict):
                         f"Fuente: {item.get('source')}\n"
                         f"Clasificación: {emoji} {classification}"
                     )
-                    summary = str(item.get("summary") or "").strip()
-                    if summary:
-                        if len(summary) > 400:
-                            summary = summary[:400].rsplit(" ", 1)[0] + "..."
-                        selected_text += f"\nResumen: {summary}"
 
                 if existing_id is not None:
                     selected_text += "\n\n⚠️ Esta noticia ya estaba registrada y no se guardó de nuevo."
@@ -605,8 +691,7 @@ def _handle_callback_query(cq: dict):
             keyword = base64.urlsafe_b64decode(b.encode()).decode()
             try:
                 cfg = storage.get_config("monitor_config") or {}
-                sources = cfg.get("sources", ["google", "bing", "hn"]) or [
-                    "google", "bing", "hn"]
+                sources = _resolve_bot_sources(cfg)
                 limit = int(cfg.get("limit", 10))
             except Exception:
                 sources = ["google", "bing", "hn"]
@@ -910,8 +995,7 @@ def handle_message(update: dict) -> None:
 
         try:
             cfg = storage.get_config("monitor_config") or {}
-            sources = cfg.get("sources", ["google", "bing", "hn"]) or [
-                "google", "bing", "hn"]
+            sources = _resolve_bot_sources(cfg)
             limit = int(cfg.get("limit", 10))
         except Exception:
             sources = ["google", "bing", "hn"]

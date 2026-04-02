@@ -207,7 +207,6 @@ def _ensure_schema():
                     f"ALTER TABLE telegram_targets ADD COLUMN {col} {typ}")
         target_cols.update(target_extra_cols.keys())
 
-        # Migración one-shot de columnas legacy -> columnas canónicas.
         try:
             if "send_alto" in target_cols:
                 if "send_high" in target_cols and "send_critical" in target_cols:
@@ -267,7 +266,6 @@ def _ensure_schema():
         except Exception:
             pass
 
-        # Inicializa columnas de reportes con valores útiles si estaban vacías.
         try:
             if "send_alerts" in target_cols:
                 cur.execute(
@@ -322,7 +320,6 @@ def _ensure_schema():
         except Exception:
             pass
 
-        # Bootstrap: si no hay destinos en la tabla nueva, migrar configuración legacy.
         try:
             cur.execute("SELECT COUNT(1) FROM telegram_targets")
             targets_count = int((cur.fetchone() or [0])[0] or 0)

@@ -417,7 +417,6 @@ def _compute_auto_report_window_dates(
         from_date = to_date - timedelta(days=7)
         return from_date.isoformat(), to_date.isoformat()
 
-    # mensual
     selected_day = _normalize_report_month_day(month_day)
     this_anchor = _build_month_anchor(
         current_date.year, current_date.month, selected_day)
@@ -1229,9 +1228,32 @@ def stream():
 
 @app.route("/config", methods=["GET", "POST"])
 def config_page():
+    def _normalize_sources_list(values, fallback=None):
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in (values or []):
+            src = str(raw or "").strip().lower()
+            if not src or src == "reddit" or src in seen:
+                continue
+            seen.add(src)
+            out.append(src)
+        if out:
+            return out
+        return list(fallback or [])
+
     if request.method == "GET":
         cfg = storage.get_config("monitor_config") or {}
         cfg.setdefault("sources", [])
+        cfg["sources"] = _normalize_sources_list(
+            cfg.get("sources"), fallback=[])
+        cfg["sources_monitor"] = _normalize_sources_list(
+            cfg.get("sources_monitor") or cfg.get("sources"),
+            fallback=cfg.get("sources") or [],
+        )
+        cfg["sources_bot"] = _normalize_sources_list(
+            cfg.get("sources_bot") or cfg.get("sources"),
+            fallback=cfg.get("sources") or [],
+        )
         cfg.setdefault("limit", 5)
         cfg.setdefault("interval_minutes", 10)
         report_cfg = _normalize_reporting_cfg(cfg.get("reporting"))
@@ -1250,7 +1272,41 @@ def config_page():
 
     form = request.form
     cfg = storage.get_config("monitor_config") or {}
-    cfg["sources"] = form.getlist("sources") or cfg.get("sources", [])
+
+    selected_monitor_sources = _normalize_sources_list(
+        form.getlist("sources_monitor") or form.getlist("sources"),
+        fallback=[],
+    )
+    selected_bot_sources = _normalize_sources_list(
+        form.getlist("sources_bot") or form.getlist("sources"),
+        fallback=[],
+    )
+    monitor_sources_present = bool(form.get("sources_monitor_present"))
+    bot_sources_present = bool(form.get("sources_bot_present"))
+
+    prev_sources = _normalize_sources_list(
+        cfg.get("sources") or [], fallback=[])
+    prev_monitor_sources = _normalize_sources_list(
+        cfg.get("sources_monitor") or prev_sources,
+        fallback=prev_sources,
+    )
+    prev_bot_sources = _normalize_sources_list(
+        cfg.get("sources_bot") or prev_sources,
+        fallback=prev_sources,
+    )
+
+    if monitor_sources_present:
+        cfg["sources_monitor"] = selected_monitor_sources
+    else:
+        cfg["sources_monitor"] = selected_monitor_sources or prev_monitor_sources
+
+    if bot_sources_present:
+        cfg["sources_bot"] = selected_bot_sources
+    else:
+        cfg["sources_bot"] = selected_bot_sources or prev_bot_sources
+
+    cfg["sources"] = list(cfg.get("sources_monitor") or [])
+
     try:
         cfg["limit"] = int(form.get("limit", cfg.get("limit", 5)))
     except Exception:
@@ -1274,7 +1330,14 @@ def config_page():
         log_exc("web: failed to replace telegram targets", e)
     _sync_telegram_fields(cfg, telegram_targets)
 
-    newsapi_opts = cfg.get("source_options", {}).get("newsapi", {})
+    source_options = cfg.get("source_options")
+    if not isinstance(source_options, dict):
+        source_options = {}
+
+    newsapi_opts = source_options.get("newsapi")
+    if not isinstance(newsapi_opts, dict):
+        newsapi_opts = {}
+
     domains = (form.get("newsapi_domains", "") or "").strip()
     newsapi_opts["domains"] = [d.strip() for d in domains.split(
         ",") if d.strip()] if domains else newsapi_opts.get("domains", [])
@@ -1291,7 +1354,33 @@ def config_page():
         except Exception:
             newsapi_opts["page_size"] = newsapi_opts.get("page_size", None)
     newsapi_opts["sort_by"] = form.get("newsapi_sort_by", "")
-    cfg.setdefault("source_options", {})["newsapi"] = newsapi_opts
+
+    x_opts = source_options.get("x")
+    if not isinstance(x_opts, dict):
+        x_opts = {}
+    x_opts["lang"] = str(form.get("x_language", "") or "").strip().lower()
+    x_opts["query_suffix"] = str(form.get("x_query_suffix", "") or "").strip()
+    x_opts["exclude_retweets"] = bool(form.get("x_exclude_retweets"))
+    x_opts["exclude_replies"] = bool(form.get("x_exclude_replies"))
+
+    x_sort = str(form.get("x_sort_order", "") or "").strip().lower()
+    if x_sort in ("recency", "relevancy"):
+        x_opts["sort_order"] = x_sort
+    else:
+        x_opts["sort_order"] = ""
+
+    x_max_results_raw = str(form.get("x_max_results", "") or "").strip()
+    if not x_max_results_raw:
+        x_opts["max_results"] = x_opts.get("max_results", None)
+    else:
+        try:
+            x_opts["max_results"] = max(10, min(100, int(x_max_results_raw)))
+        except Exception:
+            x_opts["max_results"] = x_opts.get("max_results", None)
+
+    source_options["newsapi"] = newsapi_opts
+    source_options["x"] = x_opts
+    cfg["source_options"] = source_options
 
     classifier_cfg = classifier.load_config() or {}
 
@@ -1402,7 +1491,6 @@ def config_send_test_alert():
         }
         lvl_info = level_meta.get(level, level_meta["alto"])
 
-        # Si viene desde el botón de prueba dentro del formulario, usar esos valores en memoria.
         try:
             has_form_targets = bool(request.form.getlist("tg_row_idx"))
             if has_form_targets:

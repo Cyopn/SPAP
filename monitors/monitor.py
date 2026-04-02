@@ -150,6 +150,20 @@ def _as_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in (raw_sources or []):
+        src = str(raw or "").strip().lower()
+        if not src or src == "reddit" or src in seen:
+            continue
+        seen.add(src)
+        out.append(src)
+    if out:
+        return out
+    return list(fallback or ["google", "bing", "hn"])
+
+
 def _last_day_of_month(year: int, month: int) -> int:
     first = datetime(year, month, 1, tzinfo=MONITOR_TZ).date()
     next_first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
@@ -252,7 +266,6 @@ def _run_scheduled_report_if_due(cfg: dict[str, Any]) -> None:
     if freq == "semanal" and now_local.weekday() != weekday_idx:
         return
 
-    # Para meses con menos días, se usa el último día disponible del mes.
     next_month_hint = now_local.replace(day=28) + timedelta(days=4)
     last_day_of_month = (next_month_hint.replace(
         day=1) - timedelta(days=1)).day
@@ -422,7 +435,10 @@ def run_iteration(cfg: dict | None = None) -> None:
         except Exception:
             cfg = {}
 
-    sources = cfg.get("sources") or ["google", "bing", "hn"]
+    sources = _normalize_source_list(
+        cfg.get("sources_monitor") or cfg.get("sources") or [],
+        fallback=["google", "bing", "hn"],
+    )
     try:
         limit = max(1, int(cfg.get("limit", 5) or 5))
     except Exception:
@@ -472,8 +488,10 @@ def run_iteration(cfg: dict | None = None) -> None:
         cfg_search = dict(cfg)
     except Exception:
         cfg_search = cfg or {}
-    cfg_search["sources"] = [s for s in (
-        sources or []) if (s or "").lower() != "reddit"]
+    cfg_search["sources"] = _normalize_source_list(
+        sources,
+        fallback=["google", "bing", "hn"],
+    )
 
     try:
         search_limit = max(

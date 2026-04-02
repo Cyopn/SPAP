@@ -204,7 +204,6 @@ def format_item_message(item: dict, prefix: str = "Seleccionado") -> str:
     title = str(item.get("title") or "(sin título)").strip()
     source = str(item.get("source") or "Fuente").strip()
     url = _sanitize_markdown_url(item.get("url") or "")
-    summary = " ".join(str(item.get("summary") or "").split()).strip()
 
     classification = _normalize_classification(item)
     emoji = str(item.get("emoji") or "")
@@ -221,11 +220,6 @@ def format_item_message(item: dict, prefix: str = "Seleccionado") -> str:
         parts.append(f"Fuente: {_escape_markdown(source)}")
 
     parts.append(f"Clasificación: {emoji} {classification}")
-
-    if summary:
-        if len(summary) > 400:
-            summary = summary[:400].rsplit(" ", 1)[0] + "..."
-        parts.append(f"Resumen: {_escape_markdown(summary)}")
 
     return "\n".join(parts)
 
