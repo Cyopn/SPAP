@@ -254,29 +254,6 @@ def clear_state(chat_id: str) -> None:
         storage.clear_state(chat_id)
     except Exception:
         pass
-
-
-def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = set()
-    for raw in (raw_sources or []):
-        src = str(raw or "").strip().lower()
-        if not src or src == "reddit" or src in seen:
-            continue
-        seen.add(src)
-        out.append(src)
-    if out:
-        return out
-    return list(fallback or ["google", "bing", "hn"])
-
-
-def _resolve_bot_sources(cfg: dict[str, Any] | None) -> list[str]:
-    if not isinstance(cfg, dict):
-        return ["google", "bing", "hn"]
-    return _normalize_source_list(
-        cfg.get("sources_bot") or cfg.get("sources") or [],
-        fallback=["google", "bing", "hn"],
-    )
     try:
         t = _state_timers.pop(str(chat_id), None)
         if t:
@@ -286,6 +263,31 @@ def _resolve_bot_sources(cfg: dict[str, Any] | None) -> list[str]:
                 pass
     except Exception:
         pass
+
+
+def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    allowed = {"google", "bing", "newsapi",
+               "youtube", "x", "facebook", "instagram"}
+    for raw in (raw_sources or []):
+        src = str(raw or "").strip().lower()
+        if not src or src == "reddit" or src in seen or src not in allowed:
+            continue
+        seen.add(src)
+        out.append(src)
+    if out:
+        return out
+    return list(fallback or ["google", "bing", "newsapi"])
+
+
+def _resolve_bot_sources(cfg: dict[str, Any] | None) -> list[str]:
+    if not isinstance(cfg, dict):
+        return ["google", "bing", "newsapi"]
+    return _normalize_source_list(
+        cfg.get("sources_bot") or cfg.get("sources") or [],
+        fallback=["google", "bing", "newsapi"],
+    )
 
 
 def perform_search(keyword: str, sources: list[str], limit: int) -> list[dict]:
@@ -298,17 +300,22 @@ def perform_search(keyword: str, sources: list[str], limit: int) -> list[dict]:
         cfg_local = dict(cfg_global)
         cfg_local["sources"] = _normalize_source_list(
             sources or _resolve_bot_sources(cfg_global),
-            fallback=["google", "bing", "hn"],
+            fallback=["google", "bing", "newsapi"],
         )
     except Exception:
         cfg_local = cfg_global or {}
 
-    safe_limit = 10
+    try:
+        per_source_limit = max(1, min(int(limit or 3), 20))
+    except Exception:
+        per_source_limit = 3
 
     selected_sources = _normalize_source_list(
         sources or _resolve_bot_sources(cfg_local),
-        fallback=["google", "bing", "hn"],
+        fallback=["google", "bing", "newsapi"],
     )
+    max_total_results = max(1, min(per_source_limit *
+                            max(1, len(selected_sources)), 100))
 
     now_local = now_mx()
     start_today_utc = now_local.replace(
@@ -325,18 +332,13 @@ def perform_search(keyword: str, sources: list[str], limit: int) -> list[dict]:
         if not selected_sources:
             return []
 
-        source_count = max(1, len(selected_sources))
-        base_target = safe_limit // source_count
-        remainder = safe_limit % source_count
-
         source_target: dict[str, int] = {}
         source_hits: dict[str, list[dict]] = {}
 
-        for idx, src in enumerate(selected_sources):
-            target_for_source = base_target + (1 if idx < remainder else 0)
-            target_for_source = max(1, target_for_source)
+        for src in selected_sources:
+            target_for_source = per_source_limit
             fetch_for_source = min(
-                30, max(target_for_source * 2, target_for_source + 2))
+                50, max(target_for_source * 3, target_for_source + 4))
             source_target[src] = target_for_source
 
             try:
@@ -372,12 +374,12 @@ def perform_search(keyword: str, sources: list[str], limit: int) -> list[dict]:
                     seen.add(sig)
                     merged.append(it)
                     picked += 1
-                    if len(merged) >= safe_limit:
-                        return merged[:safe_limit]
+                    if len(merged) >= max_total_results:
+                        return merged[:max_total_results]
                 else:
                     leftovers[src].append(it)
 
-        while len(merged) < safe_limit:
+        while len(merged) < max_total_results:
             progressed = False
             for src in selected_sources:
                 lst = leftovers.get(src) or []
@@ -391,20 +393,20 @@ def perform_search(keyword: str, sources: list[str], limit: int) -> list[dict]:
                     progressed = True
                     break
                 leftovers[src] = lst
-                if len(merged) >= safe_limit:
+                if len(merged) >= max_total_results:
                     break
             if not progressed:
                 break
 
-        return merged[:safe_limit]
+        return merged[:max_total_results]
 
     try:
         today_results = _search_balanced_window(start_today_utc, now_local)
         if today_results:
-            return today_results[:safe_limit]
+            return today_results[:max_total_results]
 
         week_results = _search_balanced_window(week_start_utc, now_local)
-        return week_results[:safe_limit]
+        return week_results[:max_total_results]
     except Exception as e:
         log_exc(f"telegram_bot: search_all_sources failed: {e}", e)
         return []
@@ -692,10 +694,11 @@ def _handle_callback_query(cq: dict):
             try:
                 cfg = storage.get_config("monitor_config") or {}
                 sources = _resolve_bot_sources(cfg)
-                limit = int(cfg.get("limit", 10))
+                limit = int(cfg.get("limit_per_source_bot",
+                            cfg.get("limit", 3)) or 3)
             except Exception:
-                sources = ["google", "bing", "hn"]
-                limit = 10
+                sources = ["google", "bing", "newsapi"]
+                limit = 3
 
             results = perform_search(keyword, sources, limit)
             if not results:
@@ -996,10 +999,11 @@ def handle_message(update: dict) -> None:
         try:
             cfg = storage.get_config("monitor_config") or {}
             sources = _resolve_bot_sources(cfg)
-            limit = int(cfg.get("limit", 10))
+            limit = int(cfg.get("limit_per_source_bot",
+                        cfg.get("limit", 3)) or 3)
         except Exception:
-            sources = ["google", "bing", "hn"]
-            limit = 10
+            sources = ["google", "bing", "newsapi"]
+            limit = 3
 
         results = perform_search(keyword, sources, limit)
         if not results:

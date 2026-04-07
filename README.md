@@ -2,7 +2,6 @@
 
 Script para buscar noticias a partir de palabras clave en:
 - Motores de busqueda: Google News, Bing News
--- Redes sociales/plataformas: Hacker News
 
 ## Instalacion
 
@@ -21,7 +20,7 @@ python news_finder.py --keywords "inteligencia artificial" "ciberseguridad"
 ```bash
 python news_finder.py \
   --keywords "energia solar" "economia" \
-  --sources google bing hn \
+  --sources google bing newsapi \
   --limit 10 \
   --show 25 \
   --json-out noticias.json \

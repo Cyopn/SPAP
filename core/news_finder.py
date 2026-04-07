@@ -220,46 +220,6 @@ def search_bing_news(keyword: str, limit: int) -> list[NewsItem]:
     return items
 
 
-def search_hacker_news(keyword: str, limit: int) -> list[NewsItem]:
-    raw_query = keyword or ""
-    if not str(raw_query).strip():
-        log("news_finder: search_hacker_news skipped because keyword is empty", "INFO")
-        return []
-    encoded = quote_plus(raw_query)
-    try:
-        url_preview = (
-            "https://hn.algolia.com/api/v1/search_by_date"
-            f"?query={encoded}&tags=story&hitsPerPage={limit}"
-        )
-        log(
-            f"news_finder: search_hacker_news raw='{raw_query}' encoded='{encoded}' url='{url_preview}'", "INFO")
-    except Exception:
-        pass
-    url = (
-        "https://hn.algolia.com/api/v1/search_by_date"
-        f"?query={encoded}&tags=story&hitsPerPage={limit}"
-    )
-    payload = _request_json(url)
-
-    items: list[NewsItem] = []
-    hits = payload.get("hits", [])
-    for hit in hits[:limit]:
-        title = hit.get("title") or hit.get("story_title") or "(sin titulo)"
-        story_url = hit.get("url") or hit.get("story_url") or ""
-        items.append(
-            NewsItem(
-                source="Hacker News",
-                channel="social-network",
-                title=str(title).strip(),
-                url=str(story_url).strip(),
-                summary="",
-                published_at=_safe_parse_date(str(hit.get("created_at", ""))),
-                keyword=keyword,
-            )
-        )
-    return items
-
-
 def search_x(
     keyword: str,
     limit: int,
@@ -367,6 +327,131 @@ def search_x(
                     f"https://twitter.com/i/web/status/{tid}" if tid else "").strip(),
                 summary=text.strip(),
                 published_at=_safe_parse_date(created),
+                keyword=keyword,
+            )
+        )
+    return items
+
+
+def search_youtube(
+    keyword: str,
+    limit: int,
+    api_key: str | None = None,
+    options: dict | None = None,
+    *,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> list[NewsItem]:
+    options = options if isinstance(options, dict) else {}
+    raw_query = keyword or ""
+    if not str(raw_query).strip():
+        log("news_finder: search_youtube skipped because keyword is empty", "INFO")
+        return []
+    if not api_key:
+        raise ValueError("No YouTube API key provided")
+
+    query = str(raw_query).strip()
+    suffix = str(options.get("query_suffix") or "").strip()
+    if suffix:
+        query = f"{query} {suffix}".strip()
+
+    try:
+        max_results_opt = int(options.get("max_results") or 0)
+    except Exception:
+        max_results_opt = 0
+    requested = max_results_opt if max_results_opt > 0 else int(limit or 10)
+    max_results = max(1, min(requested, 50))
+
+    params: dict[str, str | int] = {
+        "part": "snippet",
+        "type": "video",
+        "q": query,
+        "maxResults": max_results,
+        "key": api_key,
+    }
+
+    lang = str(options.get("language") or options.get(
+        "relevance_language") or "").strip().lower()
+    if lang:
+        params["relevanceLanguage"] = lang
+
+    region = str(options.get("region_code") or options.get(
+        "region") or "").strip().upper()
+    if region:
+        params["regionCode"] = region
+
+    order = str(options.get("order") or "").strip().lower()
+    if order in ("date", "relevance", "viewcount", "rating", "title"):
+        params["order"] = "viewCount" if order == "viewcount" else order
+
+    safe_search = str(options.get("safe_search") or "").strip().lower()
+    if safe_search in ("none", "moderate", "strict"):
+        params["safeSearch"] = safe_search
+
+    video_duration = str(options.get("video_duration") or "").strip().lower()
+    if video_duration in ("any", "short", "medium", "long"):
+        params["videoDuration"] = video_duration
+
+    def _to_yt_iso(dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        try:
+            parsed = dt
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=MX_TZ)
+            return (
+                parsed
+                .astimezone(timezone.utc)
+                .replace(microsecond=0)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
+        except Exception:
+            return None
+
+    published_after = _to_yt_iso(window_start)
+    published_before = _to_yt_iso(window_end)
+    if published_after:
+        params["publishedAfter"] = published_after
+    if published_before:
+        params["publishedBefore"] = published_before
+
+    url = "https://www.googleapis.com/youtube/v3/search"
+    try:
+        log(
+            f"news_finder: search_youtube raw='{raw_query}' query='{query}' params={{'maxResults': {max_results}, 'order': '{params.get('order', '')}', 'regionCode': '{params.get('regionCode', '')}', 'relevanceLanguage': '{params.get('relevanceLanguage', '')}'}}",
+            "INFO",
+        )
+    except Exception:
+        pass
+
+    resp = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
+    resp.raise_for_status()
+    payload = resp.json() or {}
+
+    items: list[NewsItem] = []
+    for entry in payload.get("items", [])[:max_results]:
+        snippet = entry.get("snippet") or {}
+        id_obj = entry.get("id") or {}
+        video_id = str(id_obj.get("videoId") or "").strip()
+        if not video_id:
+            continue
+
+        title = str(snippet.get("title") or "(sin titulo)").strip()
+        description = str(snippet.get("description") or "").strip()
+        published = str(snippet.get("publishedAt") or "").strip()
+        channel_title = str(snippet.get("channelTitle") or "").strip()
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        items.append(
+            NewsItem(
+                source="YouTube",
+                channel="social-network",
+                title=title,
+                url=video_url,
+                summary=(
+                    f"Canal: {channel_title}. {description}".strip(". ")).strip(),
+                published_at=_safe_parse_date(published),
                 keyword=keyword,
             )
         )
@@ -718,7 +803,6 @@ def build_sources_map() -> dict[str, Callable[[str, int], list[NewsItem]]]:
     m = {
         "google": search_google_news,
         "bing": search_bing_news,
-        "hn": search_hacker_news,
     }
     if _HAS_NEWSMELT_ADAPTERS:
         m["newsapi"] = search_newsapi
@@ -886,6 +970,7 @@ def search_all_sources(
 
     tokens = {
         "x": os.environ.get("X_BEARER_TOKEN"),
+        "youtube": os.environ.get("YOUTUBE_API_KEY"),
         "facebook": os.environ.get("FACEBOOK_TOKEN"),
         "instagram": os.environ.get("INSTAGRAM_TOKEN"),
         "instagram_user_id": os.environ.get("INSTAGRAM_USER_ID"),
@@ -966,20 +1051,6 @@ def search_all_sources(
                         continue
                 continue
 
-            if s == "hn":
-                for q in (query_variants or ([user_keyword] if user_keyword else []))[:4]:
-                    try:
-                        found = search_hacker_news(q, source_page_limit) or []
-                        for f in found:
-                            try:
-                                setattr(f, "matched_query", q)
-                            except Exception:
-                                pass
-                        collected.extend(found)
-                    except Exception:
-                        continue
-                continue
-
             if s == "x":
                 if not tokens.get("x"):
                     try:
@@ -996,6 +1067,36 @@ def search_all_sources(
                             source_page_limit,
                             tokens.get("x"),
                             options=x_opts,
+                            window_start=window_start_utc,
+                            window_end=window_end_utc,
+                        ) or []
+                        for f in found:
+                            try:
+                                setattr(f, "matched_query", q)
+                            except Exception:
+                                pass
+                        collected.extend(found)
+                    except Exception:
+                        continue
+                continue
+
+            if s == "youtube":
+                if not tokens.get("youtube"):
+                    try:
+                        log("news_finder: source 'youtube' selected but YOUTUBE_API_KEY is missing", "WARNING")
+                    except Exception:
+                        pass
+                    continue
+
+                yt_opts = (cfg_global.get("source_options")
+                           or {}).get("youtube", {})
+                for q in (query_variants or ([user_keyword] if user_keyword else []))[:4]:
+                    try:
+                        found = search_youtube(
+                            q,
+                            source_page_limit,
+                            tokens.get("youtube"),
+                            options=yt_opts,
                             window_start=window_start_utc,
                             window_end=window_end_utc,
                         ) or []

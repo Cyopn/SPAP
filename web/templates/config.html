@@ -63,8 +63,12 @@
                     <div class="form-text">Se usan cuando el bot hace búsquedas manuales por palabra clave.</div>
                   </div>
                   <div class="col-md-3 mt-3">
-                    <label class="form-label">Límite por fuente</label>
-                    <input type="number" name="limit" class="form-control" value="{{ params.limit }}" placeholder="Máx. resultados por fuente">
+                    <label class="form-label">Límite por fuente (monitor)</label>
+                    <input type="number" name="limit_per_source_monitor" class="form-control" value="{{ params.get('limit_per_source_monitor', params.get('limit', 5)) }}" placeholder="Máx. por fuente en monitor">
+                  </div>
+                  <div class="col-md-3 mt-3">
+                    <label class="form-label">Límite por fuente (bot)</label>
+                    <input type="number" name="limit_per_source_bot" class="form-control" value="{{ params.get('limit_per_source_bot', 3) }}" placeholder="Máx. por fuente en bot">
                   </div>
                   <div class="col-md-3 mt-3">
                     <label class="form-label">Intervalo (min)</label>
@@ -418,6 +422,68 @@
               <label class="form-check-label" for="x_exclude_replies">Excluir respuestas</label>
             </div>
             <small class="text-muted">Estas opciones se aplican al monitor y al bot cuando la fuente X está habilitada.</small>
+          </div>
+        </div>
+        <div class="card mb-3">
+          {% set youtube_opts = params.get('source_options', dict()).get('youtube', dict()) %}
+          <div class="card-body">
+            <h5 class="card-title">YouTube</h5>
+            <p class="text-muted small mb-2">Requiere YOUTUBE_API_KEY en el entorno para funcionar.</p>
+            <div class="mb-2">
+              <label class="form-label">Texto adicional de búsqueda (query suffix)</label>
+              <input type="text" name="youtube_query_suffix" class="form-control" placeholder="ej: (noticias OR alerta)" value="{{ youtube_opts.get('query_suffix','') }}">
+            </div>
+            <div class="mb-2 row">
+              <div class="col-md-3">
+                <label class="form-label">Idioma</label>
+                <select name="youtube_language" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="es" {% if youtube_opts.get('language')=='es' %}selected{% endif %}>Español (es)</option>
+                  <option value="en" {% if youtube_opts.get('language')=='en' %}selected{% endif %}>Inglés (en)</option>
+                  <option value="pt" {% if youtube_opts.get('language')=='pt' %}selected{% endif %}>Portugués (pt)</option>
+                  <option value="fr" {% if youtube_opts.get('language')=='fr' %}selected{% endif %}>Francés (fr)</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Región</label>
+                <input type="text" name="youtube_region_code" class="form-control" maxlength="2" placeholder="MX" value="{{ youtube_opts.get('region_code','') }}">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label">Orden</label>
+                <select name="youtube_order" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="date" {% if youtube_opts.get('order')=='date' %}selected{% endif %}>Más recientes</option>
+                  <option value="relevance" {% if youtube_opts.get('order')=='relevance' %}selected{% endif %}>Relevancia</option>
+                  <option value="viewcount" {% if youtube_opts.get('order')=='viewcount' %}selected{% endif %}>Vistas</option>
+                  <option value="rating" {% if youtube_opts.get('order')=='rating' %}selected{% endif %}>Calificación</option>
+                  <option value="title" {% if youtube_opts.get('order')=='title' %}selected{% endif %}>Título</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Safe Search</label>
+                <select name="youtube_safe_search" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="none" {% if youtube_opts.get('safe_search')=='none' %}selected{% endif %}>none</option>
+                  <option value="moderate" {% if youtube_opts.get('safe_search')=='moderate' %}selected{% endif %}>moderate</option>
+                  <option value="strict" {% if youtube_opts.get('safe_search')=='strict' %}selected{% endif %}>strict</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Duración</label>
+                <select name="youtube_video_duration" class="form-select">
+                  <option value="">(predeterminado)</option>
+                  <option value="any" {% if youtube_opts.get('video_duration')=='any' %}selected{% endif %}>any</option>
+                  <option value="short" {% if youtube_opts.get('video_duration')=='short' %}selected{% endif %}>short</option>
+                  <option value="medium" {% if youtube_opts.get('video_duration')=='medium' %}selected{% endif %}>medium</option>
+                  <option value="long" {% if youtube_opts.get('video_duration')=='long' %}selected{% endif %}>long</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label class="form-label">Máx por petición</label>
+                <input type="number" name="youtube_max_results" class="form-control" min="1" max="50" value="{{ youtube_opts.get('max_results','') }}">
+              </div>
+            </div>
+            <small class="text-muted">Estas opciones se aplican al monitor y al bot cuando la fuente YouTube está habilitada.</small>
           </div>
         </div>
         <h4>Configuración del Clasificador (solo palabras clave)</h4>

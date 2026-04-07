@@ -153,15 +153,17 @@ def _as_bool(value: Any, default: bool = False) -> bool:
 def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
+    allowed = {"google", "bing", "newsapi",
+               "youtube", "x", "facebook", "instagram"}
     for raw in (raw_sources or []):
         src = str(raw or "").strip().lower()
-        if not src or src == "reddit" or src in seen:
+        if not src or src == "reddit" or src in seen or src not in allowed:
             continue
         seen.add(src)
         out.append(src)
     if out:
         return out
-    return list(fallback or ["google", "bing", "hn"])
+    return list(fallback or ["google", "bing", "newsapi"])
 
 
 def _last_day_of_month(year: int, month: int) -> int:
@@ -437,12 +439,14 @@ def run_iteration(cfg: dict | None = None) -> None:
 
     sources = _normalize_source_list(
         cfg.get("sources_monitor") or cfg.get("sources") or [],
-        fallback=["google", "bing", "hn"],
+        fallback=["google", "bing", "newsapi"],
     )
     try:
-        limit = max(1, int(cfg.get("limit", 5) or 5))
+        per_source_limit = max(1, int(
+            cfg.get("limit_per_source_monitor", cfg.get("limit", 5)) or 5
+        ))
     except Exception:
-        limit = 5
+        per_source_limit = 5
     try:
         interval_minutes = max(1, int(cfg.get("interval_minutes", 5) or 5))
     except Exception:
@@ -490,35 +494,95 @@ def run_iteration(cfg: dict | None = None) -> None:
         cfg_search = cfg or {}
     cfg_search["sources"] = _normalize_source_list(
         sources,
-        fallback=["google", "bing", "hn"],
+        fallback=["google", "bing", "newsapi"],
     )
 
-    try:
-        search_limit = max(
-            limit, limit * max(1, len(cfg_search.get("sources") or [])))
-    except Exception:
-        search_limit = limit
+    active_sources = cfg_search.get("sources") or []
+    max_total_results = max(1, per_source_limit * max(1, len(active_sources)))
 
     log(
-        f"monitor: run_iteration start - sources={cfg_search.get('sources')} limit={limit} "
+        f"monitor: run_iteration start - sources={cfg_search.get('sources')} per_source_limit={per_source_limit} "
         f"interval_minutes={interval_minutes} recovery_hours={recovery_hours} "
         f"window={cutoff_utc.isoformat()}..{window_end_utc.isoformat()}",
         "INFO",
     )
 
-    try:
-        candidates = search_all_sources(
-            limit=search_limit,
-            keyword="",
-            cfg=cfg_search,
-            persist=False,
-            notify=False,
-            window_start=cutoff_utc,
-            window_end=window_end_utc,
-            strict_window=True,
-            prefer_specific_location_first=True,
-            location_only_single_query=True,
+    def _item_signature(it: dict[str, Any]) -> tuple[str, str]:
+        return (
+            str((it or {}).get("title") or "").strip().lower(),
+            str((it or {}).get("url") or "").strip().lower(),
         )
+
+    def _collect_balanced_candidates(window_start, window_end) -> list[dict[str, Any]]:
+        if not active_sources:
+            return []
+
+        source_hits: dict[str, list[dict[str, Any]]] = {}
+        for src in active_sources:
+            fetch_for_source = min(
+                100, max(per_source_limit * 3, per_source_limit + 4))
+            try:
+                cfg_source = dict(cfg_search)
+                cfg_source["sources"] = [src]
+                found = search_all_sources(
+                    limit=fetch_for_source,
+                    keyword="",
+                    cfg=cfg_source,
+                    persist=False,
+                    notify=False,
+                    window_start=window_start,
+                    window_end=window_end,
+                    strict_window=True,
+                    prefer_specific_location_first=True,
+                    location_only_single_query=True,
+                )
+                source_hits[src] = [dict(it) for it in (found or [])]
+            except Exception:
+                source_hits[src] = []
+
+        merged: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        leftovers: dict[str, list[dict[str, Any]]] = {}
+
+        for src in active_sources:
+            picked = 0
+            leftovers[src] = []
+            for it in source_hits.get(src, []):
+                sig = _item_signature(it)
+                if sig in seen:
+                    continue
+                if picked < per_source_limit:
+                    seen.add(sig)
+                    merged.append(it)
+                    picked += 1
+                    if len(merged) >= max_total_results:
+                        return merged[:max_total_results]
+                else:
+                    leftovers[src].append(it)
+
+        while len(merged) < max_total_results:
+            progressed = False
+            for src in active_sources:
+                bucket = leftovers.get(src) or []
+                while bucket:
+                    candidate = bucket.pop(0)
+                    sig = _item_signature(candidate)
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    merged.append(candidate)
+                    progressed = True
+                    break
+                leftovers[src] = bucket
+                if len(merged) >= max_total_results:
+                    break
+            if not progressed:
+                break
+
+        return merged[:max_total_results]
+
+    try:
+        candidates = _collect_balanced_candidates(cutoff_utc, window_end_utc)
     except Exception as e:
         log_exc(f"monitor: search_all_sources failed: {e}", e)
         candidates = []
@@ -567,8 +631,8 @@ def run_iteration(cfg: dict | None = None) -> None:
     source_label_by_cfg = {
         "google": "Google News",
         "bing": "Bing News",
-        "hn": "Hacker News",
         "newsapi": "NewsAPI",
+        "youtube": "YouTube",
         "x": "X/Twitter",
         "facebook": "Facebook",
         "instagram": "Instagram",
@@ -586,10 +650,10 @@ def run_iteration(cfg: dict | None = None) -> None:
             src = "Google News"
         elif src_l in ("bing", "bing news"):
             src = "Bing News"
-        elif src_l in ("hn", "hacker news"):
-            src = "Hacker News"
         elif src_l in ("newsapi", "news api"):
             src = "NewsAPI"
+        elif src_l in ("youtube",):
+            src = "YouTube"
         elif src_l in ("x", "x/twitter", "twitter"):
             src = "X/Twitter"
         elif src_l == "facebook":

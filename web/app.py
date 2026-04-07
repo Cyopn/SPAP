@@ -1231,9 +1231,11 @@ def config_page():
     def _normalize_sources_list(values, fallback=None):
         out: list[str] = []
         seen: set[str] = set()
+        allowed = {"google", "bing", "newsapi",
+                   "youtube", "x", "facebook", "instagram"}
         for raw in (values or []):
             src = str(raw or "").strip().lower()
-            if not src or src == "reddit" or src in seen:
+            if not src or src == "reddit" or src in seen or src not in allowed:
                 continue
             seen.add(src)
             out.append(src)
@@ -1254,12 +1256,22 @@ def config_page():
             cfg.get("sources_bot") or cfg.get("sources"),
             fallback=cfg.get("sources") or [],
         )
-        cfg.setdefault("limit", 5)
+        try:
+            cfg.setdefault("limit_per_source_monitor", int(
+                cfg.get("limit", 5) or 5))
+        except Exception:
+            cfg.setdefault("limit_per_source_monitor", 5)
+        try:
+            cfg.setdefault("limit_per_source_bot", int(
+                cfg.get("limit_per_source_bot", 3) or 3))
+        except Exception:
+            cfg.setdefault("limit_per_source_bot", 3)
+        cfg.setdefault("limit", cfg.get("limit_per_source_monitor", 5))
         cfg.setdefault("interval_minutes", 10)
         report_cfg = _normalize_reporting_cfg(cfg.get("reporting"))
         classifier_cfg = classifier.load_config() or {}
-        sources = ["google", "bing", "hn",
-                   "newsapi", "x", "facebook", "instagram"]
+        sources = ["google", "bing",
+                   "newsapi", "youtube", "x", "facebook", "instagram"]
         telegram_targets = _load_telegram_targets_for_ui(cfg)
         return render_template(
             "config.html",
@@ -1308,9 +1320,24 @@ def config_page():
     cfg["sources"] = list(cfg.get("sources_monitor") or [])
 
     try:
-        cfg["limit"] = int(form.get("limit", cfg.get("limit", 5)))
+        cfg["limit_per_source_monitor"] = max(1, int(form.get(
+            "limit_per_source_monitor",
+            cfg.get("limit_per_source_monitor", cfg.get("limit", 5)),
+        ) or 5))
     except Exception:
-        cfg["limit"] = cfg.get("limit", 5)
+        cfg["limit_per_source_monitor"] = 5
+
+    try:
+        cfg["limit_per_source_bot"] = max(1, int(form.get(
+            "limit_per_source_bot",
+            cfg.get("limit_per_source_bot", 3),
+        ) or 3))
+    except Exception:
+        cfg["limit_per_source_bot"] = 3
+
+    # Compatibilidad hacia atrás con código legado que aún lee cfg['limit'].
+    cfg["limit"] = cfg.get("limit_per_source_monitor", 5)
+
     try:
         cfg["interval_minutes"] = int(
             form.get("interval_minutes", cfg.get("interval_minutes", 10)))
@@ -1378,8 +1405,51 @@ def config_page():
         except Exception:
             x_opts["max_results"] = x_opts.get("max_results", None)
 
+    youtube_opts = source_options.get("youtube")
+    if not isinstance(youtube_opts, dict):
+        youtube_opts = {}
+
+    youtube_opts["language"] = str(
+        form.get("youtube_language", "") or "").strip().lower()
+    youtube_opts["region_code"] = str(
+        form.get("youtube_region_code", "") or "").strip().upper()
+    youtube_opts["query_suffix"] = str(
+        form.get("youtube_query_suffix", "") or "").strip()
+
+    youtube_order = str(form.get("youtube_order", "") or "").strip().lower()
+    if youtube_order in ("date", "relevance", "viewcount", "rating", "title"):
+        youtube_opts["order"] = youtube_order
+    else:
+        youtube_opts["order"] = ""
+
+    youtube_safe_search = str(
+        form.get("youtube_safe_search", "") or "").strip().lower()
+    if youtube_safe_search in ("none", "moderate", "strict"):
+        youtube_opts["safe_search"] = youtube_safe_search
+    else:
+        youtube_opts["safe_search"] = ""
+
+    youtube_duration = str(
+        form.get("youtube_video_duration", "") or "").strip().lower()
+    if youtube_duration in ("any", "short", "medium", "long"):
+        youtube_opts["video_duration"] = youtube_duration
+    else:
+        youtube_opts["video_duration"] = ""
+
+    yt_max_results_raw = str(
+        form.get("youtube_max_results", "") or "").strip()
+    if not yt_max_results_raw:
+        youtube_opts["max_results"] = youtube_opts.get("max_results", None)
+    else:
+        try:
+            youtube_opts["max_results"] = max(
+                1, min(50, int(yt_max_results_raw)))
+        except Exception:
+            youtube_opts["max_results"] = youtube_opts.get("max_results", None)
+
     source_options["newsapi"] = newsapi_opts
     source_options["x"] = x_opts
+    source_options["youtube"] = youtube_opts
     cfg["source_options"] = source_options
 
     classifier_cfg = classifier.load_config() or {}
