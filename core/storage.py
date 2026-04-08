@@ -181,6 +181,28 @@ def _ensure_schema():
         """
         )
 
+        cur.execute(
+            """
+        CREATE TABLE IF NOT EXISTS item_read_receipts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            chat_id TEXT NOT NULL,
+            message_id TEXT,
+            user_id TEXT NOT NULL,
+            username TEXT,
+            full_name TEXT,
+            first_read_at TEXT,
+            last_read_at TEXT,
+            reads_count INTEGER DEFAULT 1,
+            UNIQUE(item_id, chat_id, user_id)
+        )
+        """
+        )
+
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_item_read_receipts_item_id ON item_read_receipts(item_id)"
+        )
+
         cur.execute("PRAGMA table_info(telegram_targets)")
         target_cols = {r[1] for r in cur.fetchall()}
         target_extra_cols = {
@@ -604,6 +626,192 @@ def record_item_telegram_message(item_id: int, chat_id: str, message_id: Any) ->
         return int(cur.lastrowid or 0)
 
 
+def record_item_read_receipt(
+    item_id: int,
+    chat_id: str,
+    message_id: Any,
+    user_id: Any,
+    username: str | None = None,
+    full_name: str | None = None,
+) -> dict[str, Any]:
+    item_id_i = int(item_id)
+    chat_id_s = str(chat_id or "").strip()
+    user_id_s = str(user_id or "").strip()
+    message_id_s = str(message_id) if message_id is not None else ""
+    username_s = str(username or "").strip()
+    full_name_s = str(full_name or "").strip()
+
+    if not chat_id_s or not user_id_s:
+        return {
+            "ok": False,
+            "created": False,
+            "reads_count": 0,
+            "last_read_at": None,
+        }
+
+    ts = now_mx_iso()
+
+    with _connect() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, COALESCE(reads_count, 0)
+            FROM item_read_receipts
+            WHERE item_id = ? AND chat_id = ? AND user_id = ?
+            LIMIT 1
+            """,
+            (item_id_i, chat_id_s, user_id_s),
+        )
+        row = cur.fetchone()
+
+        if row:
+            receipt_id = int(row[0])
+            reads_count = int(row[1] or 0) + 1
+            cur.execute(
+                """
+                UPDATE item_read_receipts
+                SET
+                    message_id = ?,
+                    username = ?,
+                    full_name = ?,
+                    last_read_at = ?,
+                    reads_count = ?
+                WHERE id = ?
+                """,
+                (
+                    message_id_s,
+                    username_s,
+                    full_name_s,
+                    ts,
+                    reads_count,
+                    receipt_id,
+                ),
+            )
+            created = False
+        else:
+            reads_count = 1
+            cur.execute(
+                """
+                INSERT INTO item_read_receipts
+                (item_id, chat_id, message_id, user_id, username, full_name, first_read_at, last_read_at, reads_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_id_i,
+                    chat_id_s,
+                    message_id_s,
+                    user_id_s,
+                    username_s,
+                    full_name_s,
+                    ts,
+                    ts,
+                    reads_count,
+                ),
+            )
+            receipt_id = int(cur.lastrowid or 0)
+            created = True
+
+        conn.commit()
+
+    return {
+        "ok": True,
+        "id": receipt_id,
+        "created": created,
+        "reads_count": reads_count,
+        "last_read_at": ts,
+    }
+
+
+def list_item_read_stats(item_ids: list[int] | tuple[int, ...] | None) -> dict[int, dict[str, Any]]:
+    out: dict[int, dict[str, Any]] = {}
+
+    clean_ids: list[int] = []
+    seen: set[int] = set()
+    for raw in (item_ids or []):
+        try:
+            iid = int(raw)
+        except Exception:
+            continue
+        if iid <= 0 or iid in seen:
+            continue
+        seen.add(iid)
+        clean_ids.append(iid)
+
+    if not clean_ids:
+        return out
+
+    placeholders = ",".join(["?"] * len(clean_ids))
+    query = f"""
+        SELECT item_id, chat_id, message_id, user_id, username, full_name, first_read_at, last_read_at, reads_count
+        FROM item_read_receipts
+        WHERE item_id IN ({placeholders})
+        ORDER BY item_id DESC, last_read_at DESC
+    """
+
+    with _connect() as conn:
+        cur = conn.cursor()
+        cur.execute(query, tuple(clean_ids))
+        rows = cur.fetchall()
+
+    for row in rows:
+        try:
+            item_id = int(row[0])
+        except Exception:
+            continue
+
+        item_stats = out.setdefault(
+            item_id,
+            {
+                "readers_count": 0,
+                "total_reads": 0,
+                "last_read_at": "",
+                "readers": [],
+            },
+        )
+
+        user_id = str(row[3] or "").strip()
+        username = str(row[4] or "").strip()
+        full_name = str(row[5] or "").strip()
+        first_read_at = str(row[6] or "").strip()
+        last_read_at = str(row[7] or "").strip()
+        try:
+            reads_count = int(row[8] or 0)
+        except Exception:
+            reads_count = 0
+
+        if full_name:
+            reader_label = full_name
+        elif username:
+            reader_label = username if username.startswith(
+                "@") else f"@{username}"
+        elif user_id:
+            reader_label = f"ID {user_id}"
+        else:
+            reader_label = "Usuario desconocido"
+
+        item_stats["readers"].append(
+            {
+                "chat_id": str(row[1] or "").strip(),
+                "message_id": str(row[2] or "").strip(),
+                "user_id": user_id,
+                "username": username,
+                "full_name": full_name,
+                "reader_label": reader_label,
+                "first_read_at": first_read_at,
+                "last_read_at": last_read_at,
+                "reads_count": reads_count,
+            }
+        )
+
+        item_stats["readers_count"] = int(item_stats["readers_count"] or 0) + 1
+        item_stats["total_reads"] = int(
+            item_stats["total_reads"] or 0) + reads_count
+        if last_read_at and (not item_stats["last_read_at"] or last_read_at > item_stats["last_read_at"]):
+            item_stats["last_read_at"] = last_read_at
+
+    return out
+
+
 def list_telegram_targets(include_disabled: bool = True) -> list[dict[str, Any]]:
     with _connect() as conn:
         cur = conn.cursor()
@@ -775,6 +983,8 @@ __all__ = [
     "increment_item_engagement",
     "find_existing_item_id",
     "record_item_telegram_message",
+    "record_item_read_receipt",
+    "list_item_read_stats",
     "list_telegram_targets",
     "replace_telegram_targets",
 ]

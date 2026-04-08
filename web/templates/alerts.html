@@ -18,9 +18,7 @@
       {% endif %}
 
       {% if not alerts %}
-        <div class="alert alert-info">
-          No hay alertas registradas.
-        </div>
+        <div class="alert alert-info">No hay alertas registradas.</div>
       {% else %}
         <div class="table-responsive">
           <table class="table table-striped">
@@ -29,6 +27,7 @@
                 <th>ID</th>
                 <th>Nivel</th>
                 <th>Título</th>
+                <th>Lecturas</th>
               </tr>
             </thead>
             <tbody>
@@ -37,13 +36,44 @@
                   <td>{{ a.id }}</td>
                   <td>{{ a.level }}</td>
                   <td>{{ a.title }}</td>
+                  <td>
+                    <div>
+                      <strong>Lectores:</strong> {{ a.readers_count or 0 }}
+                    </div>
+                    <div>
+                      <strong>Interacciones:</strong> {{ a.total_reads or 0 }}
+                    </div>
+                    <div>
+                      <strong>Última lectura:</strong> {{ a.last_read_at or '-' }}
+                    </div>
+                    {% if a.readers %}
+                      <div class="mt-1 small">
+                        <div class="fw-semibold">Quién y cuándo:</div>
+                        <ul class="mb-0 ps-3">
+                          {% for r in a.readers %}
+                            <li>
+                              {{ r.reader_label }}
+                              {% if r.chat_id %}
+                                (chat {{ r.chat_id }})
+                              {% endif %}
+                              {% if r.last_read_at %}
+                                — {{ r.last_read_at }}
+                              {% endif %}
+                              {% if r.reads_count or 0 > 1 %}
+                                (x{{ r.reads_count }})
+                              {% endif %}
+                            </li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                    {% endif %}
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
           </table>
         </div>
       {% endif %}
-
     </div>
   </body>
 </html>

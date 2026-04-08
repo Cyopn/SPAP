@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import requests
 from typing import Optional, Any
 from core import storage
@@ -151,9 +152,17 @@ def _api_post(method: str, data: dict) -> Optional[dict]:
         return None
 
 
-def send_alert_text(chat_id: str, text: str, parse_mode: str = "Markdown") -> bool:
+def send_alert_text(
+    chat_id: str,
+    text: str,
+    parse_mode: str = "Markdown",
+    reply_markup: dict[str, Any] | None = None,
+) -> bool:
     try:
         payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+        if isinstance(reply_markup, dict) and reply_markup:
+            payload["reply_markup"] = json.dumps(
+                reply_markup, ensure_ascii=False)
         res = _api_post("sendMessage", payload)
         if res and res.get("ok"):
             try:
@@ -224,16 +233,38 @@ def format_item_message(item: dict, prefix: str = "Seleccionado") -> str:
     return "\n".join(parts)
 
 
-def send_item_notification(item: dict, chat_id: str) -> bool:
+def send_item_notification(item: dict, chat_id: str, item_id: int | None = None) -> bool:
     try:
         origin = str(item.get("origin") or "").strip().lower()
         prefix = "Seleccionado" if origin.startswith("telegram") else "Alerta"
         text = format_item_message(item, prefix=prefix)
+        reply_markup = None
+        try:
+            item_id_i = int(item_id or 0)
+        except Exception:
+            item_id_i = 0
+
+        if item_id_i > 0:
+            text = f"{text}\n\nPulsa ✅ Marcar leído para registrar quién y cuándo la vio."
+            reply_markup = {
+                "inline_keyboard": [[
+                    {
+                        "text": "✅ Marcar leído",
+                        "callback_data": f"read:{item_id_i}",
+                    }
+                ]]
+            }
+
         try:
             chat_id = normalize_chat_id(str(chat_id))
         except Exception:
             pass
-        res = send_alert_text(chat_id, text, parse_mode="Markdown")
+        res = send_alert_text(
+            chat_id,
+            text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup,
+        )
         return res
     except Exception as e:
         try:
@@ -262,7 +293,7 @@ def send_item_notification_to_targets(
         except Exception:
             chat_id = raw_chat_id
 
-        resp = send_item_notification(item, chat_id)
+        resp = send_item_notification(item, chat_id, item_id=item_id)
         ok = bool(resp and isinstance(resp, dict) and resp.get("ok"))
         message_id = None
         if ok:

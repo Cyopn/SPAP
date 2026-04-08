@@ -594,12 +594,56 @@ def _handle_callback_query(cq: dict):
     message = cq.get("message", {}) or {}
     chat = message.get("chat", {}) or {}
     chat_id = str(chat.get("id"))
+    user = cq.get("from", {}) or {}
+    user_id = user.get("id")
+    username = str(user.get("username") or "").strip()
+    first_name = str(user.get("first_name") or "").strip()
+    last_name = str(user.get("last_name") or "").strip()
+    full_name = " ".join([p for p in [first_name, last_name] if p]).strip()
     st = get_state(chat_id)
 
     if data == "cancel":
         clear_state(chat_id)
         api_post("answerCallbackQuery", {
                  "callback_query_id": cq_id, "text": "Operación cancelada.", "show_alert": False})
+        return
+
+    if data.startswith("read:"):
+        try:
+            _, raw_item_id = data.split(":", 1)
+            item_id = int(raw_item_id)
+        except Exception:
+            api_post("answerCallbackQuery", {
+                     "callback_query_id": cq_id, "text": "Lectura inválida.", "show_alert": False})
+            return
+
+        try:
+            message_id = message.get("message_id")
+            receipt = storage.record_item_read_receipt(
+                item_id=item_id,
+                chat_id=chat_id,
+                message_id=message_id,
+                user_id=user_id,
+                username=username,
+                full_name=full_name,
+            )
+
+            if receipt and receipt.get("ok"):
+                try:
+                    storage.increment_item_engagement(item_id, "view")
+                except Exception:
+                    pass
+
+                was_created = bool(receipt.get("created"))
+                msg = "Lectura registrada ✅" if was_created else "Lectura actualizada ✅"
+                api_post("answerCallbackQuery", {
+                         "callback_query_id": cq_id, "text": msg, "show_alert": False})
+            else:
+                api_post("answerCallbackQuery", {
+                         "callback_query_id": cq_id, "text": "No se pudo registrar la lectura.", "show_alert": False})
+        except Exception:
+            api_post("answerCallbackQuery", {
+                     "callback_query_id": cq_id, "text": "Error registrando lectura.", "show_alert": False})
         return
 
     if data.startswith("select:"):

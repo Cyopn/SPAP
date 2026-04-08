@@ -1521,7 +1521,32 @@ def api_alerts():
     try:
         items = storage.read_items(1000)
         alerts = [it for it in items if it.get("tg_message_id")]
-        return jsonify(alerts)
+
+        item_ids: list[int] = []
+        for it in alerts:
+            try:
+                iid = int(it.get("id") or 0)
+                if iid > 0:
+                    item_ids.append(iid)
+            except Exception:
+                continue
+
+        stats_by_item = storage.list_item_read_stats(item_ids)
+        enriched: list[dict[str, Any]] = []
+        for it in alerts:
+            row = dict(it)
+            try:
+                iid = int(row.get("id") or 0)
+            except Exception:
+                iid = 0
+            st = stats_by_item.get(iid) if iid > 0 else None
+            row["readers_count"] = int((st or {}).get("readers_count") or 0)
+            row["total_reads"] = int((st or {}).get("total_reads") or 0)
+            row["last_read_at"] = str((st or {}).get("last_read_at") or "")
+            row["readers"] = list((st or {}).get("readers") or [])
+            enriched.append(row)
+
+        return jsonify(enriched)
     except Exception as e:
         log_exc("web: error in /api/alerts", e)
         return jsonify([])
@@ -1539,7 +1564,31 @@ def alerts_page():
         if not target:
             target = None
         items = storage.read_items(1000)
-        alerts = [it for it in items if it.get("tg_message_id")]
+        alerts_raw = [it for it in items if it.get("tg_message_id")]
+
+        item_ids: list[int] = []
+        for it in alerts_raw:
+            try:
+                iid = int(it.get("id") or 0)
+                if iid > 0:
+                    item_ids.append(iid)
+            except Exception:
+                continue
+
+        stats_by_item = storage.list_item_read_stats(item_ids)
+        alerts: list[dict[str, Any]] = []
+        for it in alerts_raw:
+            row = dict(it)
+            try:
+                iid = int(row.get("id") or 0)
+            except Exception:
+                iid = 0
+            st = stats_by_item.get(iid) if iid > 0 else None
+            row["readers_count"] = int((st or {}).get("readers_count") or 0)
+            row["total_reads"] = int((st or {}).get("total_reads") or 0)
+            row["last_read_at"] = str((st or {}).get("last_read_at") or "")
+            row["readers"] = list((st or {}).get("readers") or [])
+            alerts.append(row)
 
         return render_template("alerts.html", alerts=alerts, target=target, telegram_targets=telegram_targets)
     except Exception as e:
