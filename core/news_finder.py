@@ -4,6 +4,7 @@ import csv
 import json
 import os
 import re
+import unicodedata
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -139,6 +140,14 @@ def _as_bool(value: object, default: bool = False) -> bool:
     if txt in ("0", "false", "f", "no", "n", "off"):
         return False
     return default
+
+
+def _normalize_text_for_match(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return ""
+    normalized = unicodedata.normalize("NFD", raw)
+    return "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
 
 
 def search_google_news(keyword: str, limit: int) -> list[NewsItem]:
@@ -313,11 +322,26 @@ def search_x(
                "User-Agent": DEFAULT_USER_AGENT}
     payload = _request_json(url, headers=headers)
 
+    data_hits = payload.get("data")
+    if not isinstance(data_hits, list):
+        data_hits = []
+
+    if not data_hits:
+        try:
+            log(
+                f"news_finder: search_x no data for query='{query}' meta={payload.get('meta')} errors={payload.get('errors')}",
+                "INFO",
+            )
+        except Exception:
+            pass
+
     items: list[NewsItem] = []
-    for hit in payload.get("data", [])[:limit]:
-        tid = hit.get("id")
-        text = hit.get("text", "")
-        created = hit.get("created_at", "")
+    for hit in data_hits[:limit]:
+        tid = str(hit.get("id") or "").strip()
+        note_tweet = hit.get("note_tweet") if isinstance(
+            hit.get("note_tweet"), dict) else {}
+        text = str(hit.get("text") or note_tweet.get("text") or "").strip()
+        created = str(hit.get("created_at") or "").strip()
         items.append(
             NewsItem(
                 source="X/Twitter",
@@ -853,8 +877,7 @@ def search_all_sources(
             top_location = ordered_location_queries[0] if ordered_location_queries else ""
             if top_location:
                 query_variants.append(f"{user_keyword} {top_location}".strip())
-            else:
-                query_variants.append(user_keyword)
+            query_variants.append(user_keyword)
         else:
             if include_location_only_when_keyword:
                 query_variants.extend(ordered_location_queries)
@@ -984,7 +1007,12 @@ def search_all_sources(
                             except Exception:
                                 pass
                         collected.extend(found)
-                    except Exception:
+                    except Exception as e:
+                        try:
+                            log_exc(
+                                f"news_finder: source 'x' failed for query='{q}'", e)
+                        except Exception:
+                            pass
                         continue
                 continue
 
@@ -1057,10 +1085,14 @@ def search_all_sources(
             continue
 
     if use_location_filter and loc_tokens_l:
+        loc_tokens_norm = [_normalize_text_for_match(
+            t) for t in loc_tokens_l if t]
+
         def _loc_match(it: dict) -> bool:
             text = " ".join([str(it.get(k, "") or "") for k in (
                 "title", "summary", "keyword", "matched_query")]).lower()
-            return any(t in text for t in loc_tokens_l)
+            text_norm = _normalize_text_for_match(text)
+            return any(t in text for t in loc_tokens_l) or any(t in text_norm for t in loc_tokens_norm if t)
 
         norm = [it for it in norm if _loc_match(it)]
 

@@ -245,7 +245,7 @@ def send_item_notification(item: dict, chat_id: str, item_id: int | None = None)
             item_id_i = 0
 
         if item_id_i > 0:
-            text = f"{text}\n\nPulsa ✅ Marcar leído para registrar quién y cuándo la vio."
+            text = f"{text}"
             reply_markup = {
                 "inline_keyboard": [[
                     {
