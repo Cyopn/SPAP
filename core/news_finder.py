@@ -458,95 +458,6 @@ def search_youtube(
     return items
 
 
-def search_facebook(keyword: str, limit: int, access_token: str | None = None) -> list[NewsItem]:
-    raw_query = keyword or ""
-    if not str(raw_query).strip():
-        log("news_finder: search_facebook skipped because keyword is empty", "INFO")
-        return []
-    if not access_token:
-        raise ValueError("No Facebook access token provided")
-    encoded = quote_plus(raw_query)
-    try:
-        url = f"https://graph.facebook.com/v15.0/search?type=post&q={encoded}&limit={limit}&access_token={access_token}"
-        log(
-            f"news_finder: search_facebook raw='{raw_query}' encoded='{encoded}' url='{url}'", "INFO")
-    except Exception:
-        url = f"https://graph.facebook.com/v15.0/search?type=post&q={encoded}&limit={limit}&access_token={access_token}"
-    payload = _request_json(url)
-
-    items: list[NewsItem] = []
-    for entry in payload.get("data", [])[:limit]:
-        message = entry.get("message") or entry.get("story") or ""
-        created = entry.get("created_time", "")
-        post_id = entry.get("id", "")
-        post_url = f"https://www.facebook.com/{post_id}" if post_id else ""
-        items.append(
-            NewsItem(
-                source="Facebook",
-                channel="social-network",
-                title=(message[:200] or "(sin titulo)").strip(),
-                url=post_url,
-                summary=message.strip(),
-                published_at=_safe_parse_date(created),
-                keyword=keyword,
-            )
-        )
-    return items
-
-
-def search_instagram(keyword: str, limit: int, access_token: str | None = None, ig_user_id: str | None = None) -> list[NewsItem]:
-    raw_query = keyword or ""
-    if not str(raw_query).strip():
-        log("news_finder: search_instagram skipped because keyword is empty", "INFO")
-        return []
-    if not access_token or not ig_user_id:
-        raise ValueError(
-            "Instagram search requires access_token and ig_user_id")
-
-    hashtag = "".join(ch for ch in raw_query if ch.isalnum()).lower()
-    try:
-        tag_search_url = (
-            f"https://graph.facebook.com/ig_hashtag_search?user_id={ig_user_id}&q={quote_plus(hashtag)}&access_token={access_token}"
-        )
-        log(
-            f"news_finder: search_instagram keyword='{keyword}' hashtag='{hashtag}' url='{tag_search_url}'", "INFO")
-    except Exception:
-        tag_search_url = (
-            f"https://graph.facebook.com/ig_hashtag_search?user_id={ig_user_id}&q={quote_plus(hashtag)}&access_token={access_token}"
-        )
-    tag_payload = _request_json(tag_search_url)
-    tag_id = None
-    data = tag_payload.get("data", [])
-    if data:
-        tag_id = data[0].get("id")
-
-    if not tag_id:
-        return []
-
-    media_url = (
-        f"https://graph.facebook.com/{tag_id}/recent_media?user_id={ig_user_id}&fields=id,caption,permalink,timestamp&limit={limit}&access_token={access_token}"
-    )
-    media_payload = _request_json(media_url)
-
-    items: list[NewsItem] = []
-    for m in media_payload.get("data", [])[:limit]:
-        caption = m.get("caption", "")
-        permalink = m.get("permalink", "")
-        ts = m.get("timestamp", "")
-        items.append(
-            NewsItem(
-                source="Instagram",
-                channel="social-network",
-                title=(caption[:200] or "(sin titulo)").strip(),
-                url=permalink,
-                summary=caption.strip(),
-                published_at=_safe_parse_date(ts),
-                keyword=keyword,
-            )
-        )
-    return items
-
-
 def search_newsapi(keyword: str, limit: int, options: dict | None = None) -> list[NewsItem]:
     options = options or {}
     cfg = {
@@ -971,9 +882,6 @@ def search_all_sources(
     tokens = {
         "x": os.environ.get("X_BEARER_TOKEN"),
         "youtube": os.environ.get("YOUTUBE_API_KEY"),
-        "facebook": os.environ.get("FACEBOOK_TOKEN"),
-        "instagram": os.environ.get("INSTAGRAM_TOKEN"),
-        "instagram_user_id": os.environ.get("INSTAGRAM_USER_ID"),
     }
 
     source_page_limit = max(1, min(limit, 100))
@@ -1099,40 +1007,6 @@ def search_all_sources(
                             options=yt_opts,
                             window_start=window_start_utc,
                             window_end=window_end_utc,
-                        ) or []
-                        for f in found:
-                            try:
-                                setattr(f, "matched_query", q)
-                            except Exception:
-                                pass
-                        collected.extend(found)
-                    except Exception:
-                        continue
-                continue
-
-            if s == "facebook" and tokens.get("facebook"):
-                for q in (query_variants or ([user_keyword] if user_keyword else []))[:3]:
-                    try:
-                        found = search_facebook(
-                            q, source_page_limit, tokens.get("facebook")) or []
-                        for f in found:
-                            try:
-                                setattr(f, "matched_query", q)
-                            except Exception:
-                                pass
-                        collected.extend(found)
-                    except Exception:
-                        continue
-                continue
-
-            if s == "instagram" and tokens.get("instagram") and tokens.get("instagram_user_id"):
-                for q in (query_variants or ([user_keyword] if user_keyword else []))[:3]:
-                    try:
-                        found = search_instagram(
-                            q,
-                            source_page_limit,
-                            tokens.get("instagram"),
-                            tokens.get("instagram_user_id"),
                         ) or []
                         for f in found:
                             try:

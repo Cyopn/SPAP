@@ -21,6 +21,7 @@ _REPORT_LOGO_UPLOAD_DIR = os.path.join(
     _PROJECT_ROOT, "reports", "_logo_uploads")
 _ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg",
                             ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
+_REPORT_LOGO_UPLOAD_PREFIX = "reports/_logo_uploads/"
 
 app = Flask(__name__, template_folder=_TEMPLATES_DIR)
 app.secret_key = os.environ.get("FLASK_SECRET", "dev_secret")
@@ -33,14 +34,23 @@ _GEO_CACHE: dict[str, dict] = {
 }
 
 
-def _resolve_logo_path_candidate(raw_ref: str) -> str:
+def _is_http_logo_url(raw_ref: str) -> bool:
+    ref = str(raw_ref or "").strip().lower()
+    return ref.startswith("http://") or ref.startswith("https://")
+
+
+def _is_uploaded_logo_ref(raw_ref: str) -> bool:
+    ref = str(raw_ref or "").strip().replace("\\", "/").lower()
+    return ref.startswith(_REPORT_LOGO_UPLOAD_PREFIX)
+
+
+def _normalize_logo_ref(raw_ref: str) -> str:
     ref = str(raw_ref or "").strip()
     if not ref:
         return ""
-    expanded = os.path.expanduser(ref)
-    if os.path.isabs(expanded):
-        return os.path.abspath(expanded)
-    return os.path.abspath(os.path.join(_PROJECT_ROOT, expanded))
+    if _is_http_logo_url(ref) or _is_uploaded_logo_ref(ref):
+        return ref
+    return ""
 
 
 def _save_uploaded_report_logo(files) -> str | None:
@@ -546,9 +556,9 @@ def _normalize_reporting_cfg(raw_cfg: dict[str, Any] | None) -> dict[str, Any]:
     base["branding"]["letterhead"] = str(
         branding_raw.get("letterhead") or base["branding"]["letterhead"]
     ).strip()
-    base["branding"]["logo_path"] = str(
+    base["branding"]["logo_path"] = _normalize_logo_ref(
         branding_raw.get("logo_path") or base["branding"]["logo_path"]
-    ).strip()
+    )
 
     manual_raw = cfg.get("manual") if isinstance(
         cfg.get("manual"), dict) else {}
@@ -657,8 +667,19 @@ def _merge_reporting_cfg_from_form(
     if uploaded_logo:
         cfg["branding"]["logo_path"] = uploaded_logo
     else:
-        cfg["branding"]["logo_path"] = str(form.get(
-            "report_logo_path", cfg["branding"].get("logo_path", "")) or "").strip()
+        current_logo = _normalize_logo_ref(
+            form.get("report_logo_current",
+                     cfg["branding"].get("logo_path", ""))
+        )
+        logo_url = str(form.get("report_logo_url", "") or "").strip()
+
+        if logo_url:
+            cfg["branding"]["logo_path"] = logo_url if _is_http_logo_url(
+                logo_url) else current_logo
+        elif _is_http_logo_url(current_logo):
+            cfg["branding"]["logo_path"] = ""
+        else:
+            cfg["branding"]["logo_path"] = current_logo
 
     cfg["manual"]["window"] = _normalize_manual_report_window(
         form.get("manual_report_window",
@@ -806,56 +827,43 @@ def api_geo_municipalities():
 def api_report_logo_check():
     ref = str(request.args.get("ref") or "").strip()
     if not ref:
-        return jsonify({"ok": True, "exists": False, "detail": "Debes ingresar una URL o ruta."})
+        return jsonify({"ok": True, "exists": False, "detail": "Debes ingresar una URL."})
 
-    ref_l = ref.lower()
-    if ref_l.startswith("http://") or ref_l.startswith("https://"):
+    if not _is_http_logo_url(ref):
+        return jsonify({"ok": True, "exists": False, "detail": "Solo se admite URL (http/https).", "kind": "url"})
+
+    try:
+        status = None
+        content_type = ""
         try:
+            head_resp = requests.head(
+                ref, allow_redirects=True, timeout=10)
+            status = int(head_resp.status_code)
+            content_type = str(head_resp.headers.get("Content-Type") or "")
+        except Exception:
             status = None
-            content_type = ""
+
+        if status is None or status == 405 or status >= 400:
+            get_resp = requests.get(
+                ref, stream=True, allow_redirects=True, timeout=10)
+            status = int(get_resp.status_code)
+            content_type = str(get_resp.headers.get("Content-Type") or "")
             try:
-                head_resp = requests.head(
-                    ref, allow_redirects=True, timeout=10)
-                status = int(head_resp.status_code)
-                content_type = str(head_resp.headers.get("Content-Type") or "")
+                get_resp.close()
             except Exception:
-                status = None
+                pass
 
-            if status is None or status == 405 or status >= 400:
-                get_resp = requests.get(
-                    ref, stream=True, allow_redirects=True, timeout=10)
-                status = int(get_resp.status_code)
-                content_type = str(get_resp.headers.get("Content-Type") or "")
-                try:
-                    get_resp.close()
-                except Exception:
-                    pass
+        exists = 200 <= int(status or 0) < 400
+        if exists and content_type:
+            ctype_l = content_type.lower()
+            exists = ctype_l.startswith(
+                "image/") or ctype_l.startswith("application/octet-stream")
 
-            exists = 200 <= int(status or 0) < 400
-            if exists and content_type:
-                ctype_l = content_type.lower()
-                exists = ctype_l.startswith(
-                    "image/") or ctype_l.startswith("application/octet-stream")
-
-            detail = f"HTTP {status}" + \
-                (f" | {content_type}" if content_type else "")
-            return jsonify({"ok": True, "exists": bool(exists), "detail": detail, "kind": "url"})
-        except Exception as e:
-            return jsonify({"ok": True, "exists": False, "detail": f"No accesible: {e}", "kind": "url"})
-
-    abs_path = _resolve_logo_path_candidate(ref)
-    if not abs_path:
-        return jsonify({"ok": True, "exists": False, "detail": "Ruta vacía."})
-
-    exists = os.path.isfile(abs_path)
-    if not exists:
-        return jsonify({"ok": True, "exists": False, "detail": f"No existe: {abs_path}", "kind": "path"})
-
-    ext = os.path.splitext(abs_path)[1].lower()
-    if ext and ext not in _ALLOWED_LOGO_EXTENSIONS:
-        return jsonify({"ok": True, "exists": False, "detail": "El archivo existe, pero no parece una imagen soportada.", "kind": "path"})
-
-    return jsonify({"ok": True, "exists": True, "detail": f"Existe: {abs_path}", "kind": "path"})
+        detail = f"HTTP {status}" + \
+            (f" | {content_type}" if content_type else "")
+        return jsonify({"ok": True, "exists": bool(exists), "detail": detail, "kind": "url"})
+    except Exception as e:
+        return jsonify({"ok": True, "exists": False, "detail": f"No accesible: {e}", "kind": "url"})
 
 
 @app.route("/api/classifier", methods=["GET", "POST"])
@@ -1231,8 +1239,7 @@ def config_page():
     def _normalize_sources_list(values, fallback=None):
         out: list[str] = []
         seen: set[str] = set()
-        allowed = {"google", "bing", "newsapi",
-                   "youtube", "x", "facebook", "instagram"}
+        allowed = {"google", "bing", "newsapi", "youtube", "x"}
         for raw in (values or []):
             src = str(raw or "").strip().lower()
             if not src or src == "reddit" or src in seen or src not in allowed:
@@ -1270,8 +1277,7 @@ def config_page():
         cfg.setdefault("interval_minutes", 10)
         report_cfg = _normalize_reporting_cfg(cfg.get("reporting"))
         classifier_cfg = classifier.load_config() or {}
-        sources = ["google", "bing",
-                   "newsapi", "youtube", "x", "facebook", "instagram"]
+        sources = ["google", "bing", "newsapi", "youtube", "x"]
         telegram_targets = _load_telegram_targets_for_ui(cfg)
         return render_template(
             "config.html",
@@ -1335,7 +1341,6 @@ def config_page():
     except Exception:
         cfg["limit_per_source_bot"] = 3
 
-    # Compatibilidad hacia atrás con código legado que aún lee cfg['limit'].
     cfg["limit"] = cfg.get("limit_per_source_monitor", 5)
 
     try:

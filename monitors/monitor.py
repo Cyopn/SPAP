@@ -153,8 +153,7 @@ def _as_bool(value: Any, default: bool = False) -> bool:
 def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
-    allowed = {"google", "bing", "newsapi",
-               "youtube", "x", "facebook", "instagram"}
+    allowed = {"google", "bing", "newsapi", "youtube", "x"}
     for raw in (raw_sources or []):
         src = str(raw or "").strip().lower()
         if not src or src == "reddit" or src in seen or src not in allowed:
@@ -634,8 +633,6 @@ def run_iteration(cfg: dict | None = None) -> None:
         "newsapi": "NewsAPI",
         "youtube": "YouTube",
         "x": "X/Twitter",
-        "facebook": "Facebook",
-        "instagram": "Instagram",
     }
 
     per_source_counts: dict[str, int] = {}
@@ -656,10 +653,6 @@ def run_iteration(cfg: dict | None = None) -> None:
             src = "YouTube"
         elif src_l in ("x", "x/twitter", "twitter"):
             src = "X/Twitter"
-        elif src_l == "facebook":
-            src = "Facebook"
-        elif src_l == "instagram":
-            src = "Instagram"
         else:
             src = src_raw
         per_source_counts[src] = per_source_counts.get(src, 0) + 1

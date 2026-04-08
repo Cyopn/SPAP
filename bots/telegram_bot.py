@@ -268,8 +268,7 @@ def clear_state(chat_id: str) -> None:
 def _normalize_source_list(raw_sources: Any, fallback: list[str] | None = None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
-    allowed = {"google", "bing", "newsapi",
-               "youtube", "x", "facebook", "instagram"}
+    allowed = {"google", "bing", "newsapi", "youtube", "x"}
     for raw in (raw_sources or []):
         src = str(raw or "").strip().lower()
         if not src or src == "reddit" or src in seen or src not in allowed:

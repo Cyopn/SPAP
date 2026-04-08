@@ -126,13 +126,12 @@
                 <h5 class="card-title">Telegram</h5>
                 <p class="text-muted small">Configura múltiples chats y define por separado alertas, reporte 1 clic y reporte automático.</p>
 
-                {% set tg_targets = telegram_targets if telegram_targets else [] %}
                 <div class="alert alert-info py-2 small mb-2">
                   Guía rápida: 1) agrega el chat, 2) marca qué tipo de envíos recibirá, 3) elige niveles.
                 </div>
                 <div id="telegram_targets_tbody" class="accordion mb-2">
-                  {% if tg_targets %}
-                    {% for t in tg_targets %}
+                  {% if telegram_targets %}
+                    {% for t in telegram_targets %}
                     <div class="accordion-item border rounded mb-2" data-row="{{ loop.index0 }}">
                       <h2 class="accordion-header" id="tg_head_{{ loop.index0 }}">
                         <button class="accordion-button py-2 {{ 'collapsed' if not loop.first else '' }}" type="button" data-bs-toggle="collapse" data-bs-target="#tg_body_{{ loop.index0 }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="tg_body_{{ loop.index0 }}">
@@ -318,7 +317,6 @@
                     </div>
                   {% endif %}
                 </div>
-
                 <div>
                   <div class="d-flex gap-2 flex-wrap">
                      <button type="button" class="btn btn-outline-primary" id="add_telegram_target_row">Agregar chat</button>
@@ -330,7 +328,8 @@
               </div>
             </div>
           </div>
-        <div class="card mb-3">
+<div class="col-12">
+          <div class="card">
           {% set newsapi_opts = params.get('source_options', dict()).get('newsapi', dict()) %}
           <div class="card-body">
             <h5 class="card-title">NewsAPI</h5>
@@ -340,7 +339,7 @@
             </div>
             <div class="mb-2 form-check">
               <input class="form-check-input" type="checkbox" name="newsapi_qInTitle" id="newsapi_qInTitle" value="1" {% if newsapi_opts.get('qInTitle') %}checked{% endif %}>
-              <label class="form-check-label" for="newsapi_qInTitle">Buscar solo en título (qInTitle)</label>
+              <label class="form-check-label" for="newsapi_qInTitle">Buscar solo en título</label>
             </div>
             <div class="mb-2 row">
               <div class="col-md-4">
@@ -364,7 +363,7 @@
             </div>
             <div class="mb-2 row">
               <div class="col-md-3">
-                <label class="form-label">Tamaño página (page_size)</label>
+                <label class="form-label">Tamaño página</label>
                 <input type="number" name="newsapi_page_size" class="form-control" min="1" max="100" value="{{ newsapi_opts.get('page_size','') }}">
               </div>
               <div class="col-md-3">
@@ -377,17 +376,18 @@
                 </select>
               </div>
             </div>
-            <small class="text-muted">Si no rellenás nada, se usarán los valores predeterminados del adaptador.</small>
+            <small class="text-muted">Si no rellenás nada, se usarán los valores predeterminados del adaptador (recomendado).</small>
           </div>
         </div>
-        <div class="card mb-3">
+</div>
+        <div class="col-12">
+          <div class="card">
           {% set x_opts = params.get('source_options', dict()).get('x', dict()) %}
           <div class="card-body">
             <h5 class="card-title">X / Twitter</h5>
-            <p class="text-muted small mb-2">Requiere X_BEARER_TOKEN en el entorno para funcionar.</p>
             <div class="mb-2">
-              <label class="form-label">Texto adicional de búsqueda (query suffix)</label>
-              <input type="text" name="x_query_suffix" class="form-control" placeholder="ej: (seguridad OR alerta)" value="{{ x_opts.get('query_suffix','') }}">
+              <label class="form-label">Texto adicional de búsqueda</label>
+              <input type="text" name="x_query_suffix" class="form-control" placeholder="ej: (seguridad o alerta)" value="{{ x_opts.get('query_suffix','') }}">
             </div>
             <div class="mb-2 row">
               <div class="col-md-3">
@@ -409,7 +409,7 @@
                 </select>
               </div>
               <div class="col-md-3">
-                <label class="form-label">Máx por petición</label>
+                <label class="form-label">Máximo por petición</label>
                 <input type="number" name="x_max_results" class="form-control" min="10" max="100" value="{{ x_opts.get('max_results','') }}">
               </div>
             </div>
@@ -424,14 +424,15 @@
             <small class="text-muted">Estas opciones se aplican al monitor y al bot cuando la fuente X está habilitada.</small>
           </div>
         </div>
-        <div class="card mb-3">
+        </div>
+<div class="col-12">
+          <div class="card">
           {% set youtube_opts = params.get('source_options', dict()).get('youtube', dict()) %}
           <div class="card-body">
             <h5 class="card-title">YouTube</h5>
-            <p class="text-muted small mb-2">Requiere YOUTUBE_API_KEY en el entorno para funcionar.</p>
             <div class="mb-2">
               <label class="form-label">Texto adicional de búsqueda (query suffix)</label>
-              <input type="text" name="youtube_query_suffix" class="form-control" placeholder="ej: (noticias OR alerta)" value="{{ youtube_opts.get('query_suffix','') }}">
+              <input type="text" name="youtube_query_suffix" class="form-control" placeholder="ej: (noticias o alerta)" value="{{ youtube_opts.get('query_suffix','') }}">
             </div>
             <div class="mb-2 row">
               <div class="col-md-3">
@@ -486,20 +487,30 @@
             <small class="text-muted">Estas opciones se aplican al monitor y al bot cuando la fuente YouTube está habilitada.</small>
           </div>
         </div>
-        <h4>Configuración del Clasificador (solo palabras clave)</h4>
-        <p class="text-muted">Introduce las palabras clave para cada nivel; separa por saltos de línea o comas.</p>
-        <div class="mb-3">
-          <label class="form-label">Palabras clave (alto)</label>
-          <textarea name="classifier_alto_keywords" class="form-control" rows="3">{{ classifier.get('alto',{}).get('keywords')|join('\n') if classifier.get('alto') else '' }}</textarea>
+</div>
+        
+<div class="col-12">
+          <div class="card">
+<div class="card-body">
+          <h5 class="card-title">Configuración del Clasificador (palabras clave)</h5>
+  <p class="text-muted">Introduce las palabras clave para cada nivel; separa por saltos de línea o comas.</p>
+        <div class="row g-3 mb-3">
+          <div class="col-12 col-lg-4">
+            <label class="form-label">Palabras clave (alto)</label>
+            <textarea name="classifier_alto_keywords" class="form-control" rows="6">{{ classifier.get('alto',{}).get('keywords')|join('\n') if classifier.get('alto') else '' }}</textarea>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label">Palabras clave (medio)</label>
+            <textarea name="classifier_medio_keywords" class="form-control" rows="6">{{ classifier.get('medio',{}).get('keywords')|join('\n') if classifier.get('medio') else '' }}</textarea>
+          </div>
+          <div class="col-12 col-lg-4">
+            <label class="form-label">Palabras clave (bajo)</label>
+            <textarea name="classifier_bajo_keywords" class="form-control" rows="6">{{ classifier.get('bajo',{}).get('keywords')|join('\n') if classifier.get('bajo') else '' }}</textarea>
+          </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Palabras clave (medio)</label>
-          <textarea name="classifier_medio_keywords" class="form-control" rows="3">{{ classifier.get('medio',{}).get('keywords')|join('\n') if classifier.get('medio') else '' }}</textarea>
+</div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Palabras clave (bajo)</label>
-          <textarea name="classifier_bajo_keywords" class="form-control" rows="3">{{ classifier.get('bajo',{}).get('keywords')|join('\n') if classifier.get('bajo') else '' }}</textarea>
-        </div>
+</div>
 
         <div class="col-12">
           <div class="card">
@@ -515,16 +526,20 @@
           </div>
         </div>
 
-        {% set rp = report_cfg if report_cfg is defined and report_cfg else dict() %}
+        {% set rp = report_cfg|default({}, true) %}
         {% set report_branding = rp.get('branding', dict()) %}
         {% set report_manual = rp.get('manual', dict()) %}
         {% set report_auto = rp.get('auto', dict()) %}
         {% set report_auto_month_day = report_auto.get('month_day', 1) | int %}
+        {% set report_logo_path = report_branding.get('logo_path','') %}
+        {% set report_logo_l = report_logo_path|lower %}
+        {% set report_logo_is_url = report_logo_l[:7] == 'http://' or report_logo_l[:8] == 'https://' %}
+        {% set report_logo_is_uploaded = report_logo_l[:22] == 'reports/_logo_uploads/' %}
 
         <div class="col-12">
           <div class="card">
             <div class="card-body">
-              <h5 class="card-title">Reportes en 1 clic (PDF/Excel)</h5>
+              <h5 class="card-title">Reportes en 1 clic</h5>
               <p class="text-muted small">Genera reportes profesionales por fecha, nivel y categoría/palabra clave.</p>
 
               <div class="row g-2 mb-3">
@@ -537,17 +552,21 @@
                   <input type="text" name="report_letterhead" class="form-control" value="{{ report_branding.get('letterhead','') }}" placeholder="Ej: Reporte ejecutivo de incidencias">
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label">Ruta o URL del logo</label>
+                  <label class="form-label">URL del logo</label>
                   <div class="input-group">
-                    <input type="text" name="report_logo_path" id="report_logo_path" class="form-control" value="{{ report_branding.get('logo_path','') }}" placeholder="Ej: assets/logo.png o https://...">
+                    <input type="text" name="report_logo_url" id="report_logo_url" class="form-control" value="{{ report_logo_path if report_logo_is_url else '' }}" placeholder="Ej: https://...">
                     <button type="button" class="btn btn-outline-secondary" id="report_logo_validate_btn">Validar</button>
                   </div>
-                  <div id="report_logo_validate_result" class="form-text">Puedes usar URL, ruta local o subir archivo.</div>
+                  <input type="hidden" name="report_logo_current" value="{{ report_logo_path }}">
+                  <div id="report_logo_validate_result" class="form-text">Solo se admite URL (http/https) o subir archivo.</div>
+                  {% if report_logo_is_uploaded %}
+                  <div class="form-text text-success">Hay un logo subido guardado actualmente.</div>
+                  {% endif %}
                 </div>
                 <div class="col-md-4">
                   <label class="form-label">Subir logo (opcional)</label>
                   <input type="file" name="report_logo_file" id="report_logo_file" class="form-control" accept=".png,.jpg,.jpeg,.webp,.gif,.bmp,.svg,image/*">
-                  <div class="form-text">Si subes archivo, tendrá prioridad sobre URL/ruta.</div>
+                  <div class="form-text">Si subes archivo, tendrá prioridad sobre URL.</div>
                 </div>
               </div>
 
@@ -669,7 +688,7 @@
               </div>
 
               <div class="alert alert-light border mt-3 mb-0">
-                La activación y los niveles del reporte automático se configuran en la sección <strong>Telegram</strong> con la columna <strong>Auto</strong> y sus niveles.
+                La activación y los niveles del reporte automático se configuran en la sección <strong>Telegram</strong> con la columna <strong>Reporte automático</strong> y sus niveles.
               </div>
             </div>
           </div>
@@ -865,7 +884,7 @@
     </script>
     <script>
       (function () {
-        const logoInput = document.getElementById("report_logo_path");
+        const logoInput = document.getElementById("report_logo_url");
         const logoFile = document.getElementById("report_logo_file");
         const validateBtn = document.getElementById("report_logo_validate_btn");
         const resultEl = document.getElementById("report_logo_validate_result");
@@ -895,7 +914,7 @@
         validateBtn.addEventListener("click", async function () {
           const ref = String(logoInput.value || "").trim();
           if (!ref) {
-            setResult("Ingresa una URL o ruta para validar.", "warning");
+            setResult("Ingresa una URL para validar.", "warning");
             return;
           }
 

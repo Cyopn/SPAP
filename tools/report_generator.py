@@ -15,6 +15,7 @@ from core.timezone_mx import MX_TZ, now_mx
 
 REPORTS_DIR = Path("reports")
 ALLOWED_LEVELS = ("alto", "medio", "bajo")
+_UPLOADED_LOGO_PREFIX = "reports/_logo_uploads/"
 
 
 def _ensure_reports_dir() -> Path:
@@ -193,7 +194,8 @@ def _resolve_logo_path(logo_ref: str | None) -> str | None:
     if not raw:
         return None
 
-    if raw.lower().startswith("http://") or raw.lower().startswith("https://"):
+    raw_l = raw.lower()
+    if raw_l.startswith("http://") or raw_l.startswith("https://"):
         cache_dir = _ensure_reports_dir() / "_logo_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         key = hashlib.md5(raw.encode("utf-8")).hexdigest()
@@ -210,10 +212,13 @@ def _resolve_logo_path(logo_ref: str | None) -> str | None:
             log_exc("report: failed to download logo", e)
             return None
 
-    p = Path(raw)
-    if not p.is_absolute():
-        p = Path.cwd() / p
-    return str(p) if p.exists() else None
+    normalized = raw.replace("\\", "/").lower()
+    if normalized.startswith(_UPLOADED_LOGO_PREFIX):
+        p = Path(raw)
+        if not p.is_absolute():
+            p = Path.cwd() / p
+        return str(p) if p.exists() else None
+    return None
 
 
 def _export_pdf_report(

@@ -29,11 +29,10 @@ python news_finder.py \
 
 ## Soporte para redes sociales que requieren credenciales
 
-El script incluye soporte opcional para X/Twitter, Facebook e Instagram vía APIs oficiales. Estas fuentes requieren credenciales y permisos:
+El script incluye soporte opcional para X/Twitter y YouTube vía APIs oficiales. Estas fuentes requieren credenciales y permisos:
 
 - X/Twitter: proporciona un `Bearer Token` (env `X_BEARER_TOKEN` o `--x-bearer-token`).
-- Facebook: proporciona un `access_token` para Graph API (env `FACEBOOK_TOKEN` o `--facebook-token`).
-- Instagram (experimental): requiere `INSTAGRAM_TOKEN` y `INSTAGRAM_USER_ID` (cuenta Business) para búsqueda por hashtag.
+- YouTube: requiere API Key de YouTube Data API v3 (env `YOUTUBE_API_KEY`).
 
 Ejemplo con X/Twitter:
 
@@ -48,7 +47,7 @@ Si una fuente requiere credenciales y no están disponibles, el script la omitir
 
 - Algunas fuentes pueden limitar peticiones por IP.
 - Este script usa endpoints publicos (sin claves API), por lo que es ideal para prototipos.
-- Si quieres incluir X/Twitter, Instagram, TikTok o LinkedIn, normalmente necesitaras APIs oficiales y credenciales.
+- Si quieres incluir X/Twitter, TikTok o LinkedIn, normalmente necesitaras APIs oficiales y credenciales.
 
 ---
 
@@ -69,7 +68,7 @@ Configura estas variables en `.env` (ya existe `BOT_TOKEN` en el repositorio de 
 
 - `BOT_TOKEN` (requerido) — token del bot de Telegram.
 - `TELEGRAM_TARGET_CHAT_ID` (opcional) — chat_id o @username donde el bot publicará automáticamente.
-- `X_BEARER_TOKEN`, `FACEBOOK_TOKEN`, `INSTAGRAM_TOKEN`, `INSTAGRAM_USER_ID` — opcionales para `news_finder.py`.
+- `X_BEARER_TOKEN`, `YOUTUBE_API_KEY` — opcionales para `news_finder.py`.
 
 ### Instalación
 
