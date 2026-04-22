@@ -6,7 +6,7 @@ import os
 import re
 import unicodedata
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable, Iterable
 from urllib.parse import quote_plus
@@ -299,8 +299,49 @@ def search_x(
         except Exception:
             return None
 
-    start_time = _to_x_iso(window_start)
-    end_time = _to_x_iso(window_end)
+    # X recent search acepta solo los últimos 7 días y requiere end_time >= 10s antes del request time.
+    start_dt = window_start
+    end_dt = window_end
+    try:
+        now_utc = datetime.now(timezone.utc)
+        min_start_utc = now_utc - timedelta(days=7) + timedelta(minutes=1)
+        max_end_utc = now_utc - timedelta(seconds=20)
+
+        if end_dt is not None:
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=MX_TZ)
+            end_dt = end_dt.astimezone(timezone.utc)
+            if end_dt > max_end_utc:
+                try:
+                    log(
+                        f"news_finder: search_x clamped end_time from {end_dt.isoformat()} to {max_end_utc.isoformat()} (10s minimum lag)",
+                        "INFO",
+                    )
+                except Exception:
+                    pass
+                end_dt = max_end_utc
+
+        if start_dt is not None:
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=MX_TZ)
+            start_dt = start_dt.astimezone(timezone.utc)
+            if start_dt < min_start_utc:
+                try:
+                    log(
+                        f"news_finder: search_x clamped start_time from {start_dt.isoformat()} to {min_start_utc.isoformat()} (7-day limit)",
+                        "INFO",
+                    )
+                except Exception:
+                    pass
+                start_dt = min_start_utc
+
+        if start_dt is not None and end_dt is not None and start_dt >= end_dt:
+            start_dt = end_dt - timedelta(minutes=1)
+    except Exception:
+        pass
+
+    start_time = _to_x_iso(start_dt)
+    end_time = _to_x_iso(end_dt)
     if start_time:
         params["start_time"] = start_time
     if end_time:
@@ -320,7 +361,44 @@ def search_x(
         pass
     headers = {"Authorization": f"Bearer {bearer_token}",
                "User-Agent": DEFAULT_USER_AGENT}
-    payload = _request_json(url, headers=headers)
+    try:
+        payload = _request_json(url, headers=headers)
+    except requests.HTTPError as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        body = ""
+        try:
+            body = str(getattr(e.response, "text", "") or "").strip()
+        except Exception:
+            body = ""
+        if len(body) > 500:
+            body = body[:500].rstrip() + "..."
+
+        try:
+            if status in (401, 403):
+                log(
+                    f"news_finder: search_x unauthorized/forbidden status={status} query='{query}'. Verifica X_BEARER_TOKEN, permisos y acceso a v2 recent search. body={body}",
+                    "WARNING",
+                )
+            elif status == 429:
+                log(
+                    f"news_finder: search_x rate-limited status=429 query='{query}'. body={body}",
+                    "WARNING",
+                )
+            else:
+                log(
+                    f"news_finder: search_x HTTP error status={status} query='{query}'. body={body}",
+                    "WARNING",
+                )
+        except Exception:
+            pass
+        return []
+    except requests.RequestException as e:
+        try:
+            log(
+                f"news_finder: search_x request error query='{query}': {e}", "WARNING")
+        except Exception:
+            pass
+        return []
 
     data_hits = payload.get("data")
     if not isinstance(data_hits, list):

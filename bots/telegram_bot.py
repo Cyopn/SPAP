@@ -1005,6 +1005,11 @@ def handle_message(update: dict) -> None:
 
     lower = text.strip().lower()
 
+    if lower.startswith("/start"):
+        clear_state(chat_id)
+        send_start_menu(chat_id)
+        return
+
     state = get_state(chat_id)
 
     if state and state.get("action") == "awaiting_news":
@@ -1039,6 +1044,16 @@ def handle_message(update: dict) -> None:
             set_state(chat_id, {"action": "awaiting_search"})
             return
 
+        if keyword.startswith("/"):
+            clear_state(chat_id)
+            _send_temp_message(
+                chat_id,
+                "Búsqueda cancelada. Comando detectado.",
+                seconds=6,
+            )
+            send_start_menu(chat_id)
+            return
+
         try:
             cfg = storage.get_config("monitor_config") or {}
             sources = _resolve_bot_sources(cfg)
@@ -1050,11 +1065,13 @@ def handle_message(update: dict) -> None:
 
         results = perform_search(keyword, sources, limit)
         if not results:
+            clear_state(chat_id)
             _send_temp_message(
                 chat_id,
-                "No se encontraron resultados.",
+                "No se encontraron resultados. Búsqueda cancelada.",
                 seconds=6,
             )
+            send_start_menu(chat_id)
             return
 
         send_inline_search_results(chat_id, keyword, results)
@@ -1096,11 +1113,6 @@ def handle_message(update: dict) -> None:
         api_post("sendMessage", {"chat_id": chat_id, "text": preview,
                                  "parse_mode": "HTML", "reply_markup": json.dumps(kb)})
         set_state(chat_id, state)
-        return
-
-    if lower.startswith("/start"):
-        clear_state(chat_id)
-        send_start_menu(chat_id)
         return
 
     try:
