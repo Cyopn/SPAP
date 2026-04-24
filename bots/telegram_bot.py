@@ -27,12 +27,40 @@ else:
     load_dotenv()
 
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
 OFFSET_FILE = "telegram_offset.txt"
-API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-if not BOT_TOKEN:
-    raise SystemExit("BOT_TOKEN no encontrado en .env")
+
+def _get_bot_token() -> str:
+    try:
+        cfg = storage.get_config("monitor_config") or {}
+    except Exception:
+        cfg = {}
+
+    try:
+        creds = cfg.get("credentials")
+        if not isinstance(creds, dict):
+            creds = {}
+    except Exception:
+        creds = {}
+
+    token = str(creds.get("BOT_TOKEN") or "").strip()
+    if token:
+        return token
+    return str(os.environ.get("BOT_TOKEN") or "").strip()
+
+
+def _api_base() -> str | None:
+    token = _get_bot_token()
+    if not token:
+        return None
+    return f"https://api.telegram.org/bot{token}"
+
+
+if not _get_bot_token():
+    try:
+        log("telegram_bot: BOT_TOKEN no configurado (config/.env)", "WARNING")
+    except Exception:
+        pass
 
 try:
     log(f"telegram_bot: NEWS_API={'set' if os.environ.get('NEWS_API') else 'unset'}")
@@ -55,7 +83,10 @@ def _clear_telegram_commands():
 
 
 def api_post(method: str, data: dict) -> Optional[dict]:
-    url = f"{API}/{method}"
+    base = _api_base()
+    if not base:
+        return None
+    url = f"{base}/{method}"
     try:
         resp = requests.post(url, data=data, timeout=15)
         resp.raise_for_status()
@@ -646,6 +677,28 @@ def _handle_callback_query(cq: dict):
                      "callback_query_id": cq_id, "text": "Error registrando lectura.", "show_alert": False})
         return
 
+    if data.startswith("share:"):
+        try:
+            _, raw_item_id = data.split(":", 1)
+            item_id = int(raw_item_id)
+        except Exception:
+            api_post("answerCallbackQuery", {
+                     "callback_query_id": cq_id, "text": "Compartición inválida.", "show_alert": False})
+            return
+
+        try:
+            storage.increment_item_engagement(item_id, "share")
+            api_post("answerCallbackQuery", {
+                     "callback_query_id": cq_id, "text": "Compartida la noticia 📤", "show_alert": False})
+        except Exception as e:
+            try:
+                log_exc("telegram_bot: error en callback share", e)
+            except Exception:
+                pass
+            api_post("answerCallbackQuery", {
+                     "callback_query_id": cq_id, "text": "Error al registrar compartición.", "show_alert": False})
+        return
+
     if data.startswith("select:"):
         try:
             _, search_id, idx = data.split(":")
@@ -1144,7 +1197,12 @@ def poll_updates(poll_interval: int = 2) -> None:
     log("Iniciando poller de Telegram... (CTRL+C para salir)")
     while True:
         try:
-            url = f"{API}/getUpdates?timeout=20&offset={offset + 1}"
+            base = _api_base()
+            if not base:
+                log("telegram_bot: BOT_TOKEN no configurado, esperando token...", "WARNING")
+                time.sleep(poll_interval)
+                continue
+            url = f"{base}/getUpdates?timeout=20&offset={offset + 1}"
             resp = requests.get(url, timeout=30)
             resp.raise_for_status()
             data = resp.json()

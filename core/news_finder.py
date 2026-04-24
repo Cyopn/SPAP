@@ -142,6 +142,16 @@ def _as_bool(value: object, default: bool = False) -> bool:
     return default
 
 
+def _get_config_credential(cfg: dict | None, key: str) -> str:
+    cfg_local = cfg if isinstance(cfg, dict) else {}
+    creds = cfg_local.get("credentials")
+    if isinstance(creds, dict):
+        value = str(creds.get(key) or "").strip()
+        if value:
+            return value
+    return str(os.environ.get(key) or "").strip()
+
+
 def _normalize_text_for_match(value: object) -> str:
     raw = str(value or "").strip().lower()
     if not raw:
@@ -299,7 +309,6 @@ def search_x(
         except Exception:
             return None
 
-    # X recent search acepta solo los últimos 7 días y requiere end_time >= 10s antes del request time.
     start_dt = window_start
     end_dt = window_end
     try:
@@ -575,7 +584,8 @@ def search_newsapi(keyword: str, limit: int, options: dict | None = None) -> lis
         "domains": options.get("domains", []),
     }
 
-    api_key = os.environ.get("NEWS_API")
+    api_key = str(options.get("api_key") or "").strip(
+    ) or os.environ.get("NEWS_API")
     if not keyword or not str(keyword).strip():
         try:
             log(f"news_finder: search_newsapi skipped because keyword is empty", "INFO")
@@ -823,10 +833,6 @@ def build_sources_map() -> dict[str, Callable[[str, int], list[NewsItem]]]:
 
 
 def _compute_impact_level(item: dict) -> str:
-    """Heurística simple para asignar nivel de impacto a un ítem.
-
-    Devuelve una de: 'bajo', 'medio', 'alto'
-    """
     text = " ".join([str(item.get(k, "") or "")
                     for k in ("title", "summary", "keyword")]).lower()
     if any(w in text for w in ("crític", "critic", "urgente", "inmediato", "evacu", "explos", "ataque", "muert", "herid", "colapso")):
@@ -853,11 +859,6 @@ def search_all_sources(
     keyword_with_location_only: bool = False,
     location_only_single_query: bool = False,
 ) -> list[dict]:
-    """Método unificado de búsqueda para bot y monitor.
-
-    Prioriza ubicación en la construcción de queries (país -> estado -> municipio -> colonia)
-    y permite activar/desactivar persistencia y notificaciones.
-    """
     from core import storage as _storage
 
     try:
@@ -981,8 +982,8 @@ def search_all_sources(
     collected: list[NewsItem] = []
 
     tokens = {
-        "x": os.environ.get("X_BEARER_TOKEN"),
-        "youtube": os.environ.get("YOUTUBE_API_KEY"),
+        "x": _get_config_credential(cfg_global, "X_BEARER_TOKEN"),
+        "youtube": _get_config_credential(cfg_global, "YOUTUBE_API_KEY"),
     }
 
     source_page_limit = max(1, min(limit, 100))
@@ -992,6 +993,11 @@ def search_all_sources(
             if s == "newsapi":
                 newsapi_opts = (cfg_global.get("source_options")
                                 or {}).get("newsapi", {})
+                if not isinstance(newsapi_opts, dict):
+                    newsapi_opts = {}
+                newsapi_opts = dict(newsapi_opts)
+                newsapi_opts["api_key"] = _get_config_credential(
+                    cfg_global, "NEWS_API")
                 try:
                     loc_country = (cfg_global.get("location")
                                    or {}).get("country")

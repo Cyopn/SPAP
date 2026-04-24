@@ -7,8 +7,33 @@ from typing import Optional, Any
 from core import storage
 from core.logger import log, log_exc
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-API = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else None
+
+def _get_bot_token(cfg: dict[str, Any] | None = None) -> str:
+    if isinstance(cfg, dict):
+        cfg_local = cfg
+    else:
+        try:
+            cfg_local = storage.get_config("monitor_config") or {}
+        except Exception:
+            cfg_local = {}
+    try:
+        creds = cfg_local.get("credentials")
+        if not isinstance(creds, dict):
+            creds = {}
+    except Exception:
+        creds = {}
+
+    token = str(creds.get("BOT_TOKEN") or "").strip()
+    if token:
+        return token
+    return str(os.environ.get("BOT_TOKEN") or "").strip()
+
+
+def _get_api_base(cfg: dict[str, Any] | None = None) -> str | None:
+    token = _get_bot_token(cfg)
+    if not token:
+        return None
+    return f"https://api.telegram.org/bot{token}"
 
 
 def _to_bool(value: Any, default: bool = False) -> bool:
@@ -124,11 +149,12 @@ def get_target_chats_for_item(item: dict[str, Any], cfg: dict[str, Any] | None =
     return out
 
 
-def _api_post(method: str, data: dict) -> Optional[dict]:
-    if not API:
+def _api_post(method: str, data: dict, cfg: dict[str, Any] | None = None) -> Optional[dict]:
+    api_base = _get_api_base(cfg)
+    if not api_base:
         log("core.telegram: BOT_TOKEN not configured", "ERROR")
         return None
-    url = f"{API}/{method}"
+    url = f"{api_base}/{method}"
     resp = None
     try:
         resp = requests.post(url, data=data, timeout=15)
@@ -163,7 +189,7 @@ def send_alert_text(
         if isinstance(reply_markup, dict) and reply_markup:
             payload["reply_markup"] = json.dumps(
                 reply_markup, ensure_ascii=False)
-        res = _api_post("sendMessage", payload)
+        res = _api_post("sendMessage", payload, cfg=None)
         if res and res.get("ok"):
             try:
                 log(f"core.telegram: message sent to {chat_id}")
@@ -251,6 +277,10 @@ def send_item_notification(item: dict, chat_id: str, item_id: int | None = None)
                     {
                         "text": "✅ Marcar leído",
                         "callback_data": f"read:{item_id_i}",
+                    },
+                    {
+                        "text": "📤 Compartir",
+                        "callback_data": f"share:{item_id_i}",
                     }
                 ]]
             }
@@ -322,7 +352,8 @@ def send_item_notification_to_targets(
 
 
 def send_document(chat_id: str, file_path: str, caption: str | None = None, parse_mode: str = "Markdown") -> Optional[dict]:
-    if not API:
+    api_base = _get_api_base()
+    if not api_base:
         log("core.telegram: BOT_TOKEN not configured", "ERROR")
         return None
 
@@ -345,7 +376,7 @@ def send_document(chat_id: str, file_path: str, caption: str | None = None, pars
         data["caption"] = str(caption)
         data["parse_mode"] = parse_mode
 
-    url = f"{API}/sendDocument"
+    url = f"{api_base}/sendDocument"
     resp = None
     try:
         with open(path, "rb") as fh:
@@ -394,3 +425,43 @@ def normalize_chat_id(raw: str) -> str:
         except Exception:
             return "@" + s
     return s
+
+
+def apply_bot_profile_from_config(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    cfg_local = cfg if isinstance(cfg, dict) else {}
+    bot_profile = cfg_local.get("bot_profile")
+    if not isinstance(bot_profile, dict):
+        bot_profile = {}
+
+    name = str(bot_profile.get("name") or "").strip()
+    description = str(bot_profile.get("description") or "").strip()
+    short_description = str(bot_profile.get("short_description") or "").strip()
+
+    results: list[dict[str, Any]] = []
+
+    if name:
+        res_name = _api_post("setMyName", {"name": name}, cfg=cfg_local)
+        results.append({"field": "name", "ok": bool(
+            res_name and res_name.get("ok")), "response": res_name})
+
+    if description:
+        res_desc = _api_post("setMyDescription", {
+                             "description": description}, cfg=cfg_local)
+        results.append({"field": "description", "ok": bool(
+            res_desc and res_desc.get("ok")), "response": res_desc})
+
+    if short_description:
+        res_short = _api_post(
+            "setMyShortDescription",
+            {"short_description": short_description},
+            cfg=cfg_local,
+        )
+        results.append({"field": "short_description", "ok": bool(
+            res_short and res_short.get("ok")), "response": res_short})
+
+    return {
+        "ok": all(r.get("ok") for r in results) if results else False,
+        "updated_fields": [r.get("field") for r in results if r.get("ok")],
+        "failed_fields": [r.get("field") for r in results if not r.get("ok")],
+        "results": results,
+    }

@@ -27,7 +27,7 @@
                 <th>ID</th>
                 <th>Nivel</th>
                 <th>Título</th>
-                <th>Lecturas</th>
+                <th>Engagement</th>
               </tr>
             </thead>
             <tbody>
@@ -38,10 +38,13 @@
                   <td>{{ a.title }}</td>
                   <td>
                     <div>
-                      <strong>Lectores:</strong> {{ a.readers_count or 0 }}
+                      <strong>👥 Lectores:</strong> {{ a.readers_count or 0 }}
                     </div>
                     <div>
-                      <strong>Interacciones:</strong> {{ a.total_reads or 0 }}
+                      <strong>👁️ Vistas:</strong> {{ a.views_count or 0 }}
+                    </div>
+                    <div>
+                      <strong>📤 Comparticiones:</strong> {{ a.shares_count or 0 }}
                     </div>
                     <div>
                       <strong>Última lectura:</strong> {{ a.last_read_at or '-' }}

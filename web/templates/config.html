@@ -79,6 +79,39 @@
             </div>
           </div>
 
+          {% set bp = bot_profile|default({}, true) %}
+          <div class="col-12">
+            <div class="card">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <div>
+                    <h5 class="card-title mb-1">Ajustes del Bot</h5>
+                    <p class="text-muted small mb-0">Configura nombre y descripciones del bot. Puedes aplicar estos datos a Telegram.</p>
+                  </div>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#credentialsModal">Configurar API keys / tokens</button>
+                    <button formaction="/config/apply_bot_profile" formmethod="post" class="btn btn-outline-primary">Aplicar perfil en Telegram</button>
+                  </div>
+                </div>
+
+                <div class="row g-2 mt-1">
+                  <div class="col-md-4">
+                    <label class="form-label">Nombre del bot</label>
+                    <input type="text" name="bot_name" class="form-control" value="{{ bp.get('name','') }}" placeholder="Ej: SPAP Monitor Bot">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Descripción</label>
+                    <input type="text" name="bot_description" class="form-control" value="{{ bp.get('description','') }}" placeholder="Descripción larga para perfil del bot">
+                  </div>
+                  <div class="col-md-4">
+                    <label class="form-label">Descripción corta</label>
+                    <input type="text" name="bot_short_description" class="form-control" value="{{ bp.get('short_description','') }}" placeholder="Texto corto para perfil del bot">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="col-12">
             <div class="card">
               <div class="card-body">
@@ -689,6 +722,50 @@
 
               <div class="alert alert-light border mt-3 mb-0">
                 La activación y los niveles del reporte automático se configuran en la sección <strong>Telegram</strong> con la columna <strong>Reporte automático</strong> y sus niveles.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal fade" id="credentialsModal" tabindex="-1" aria-labelledby="credentialsModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="credentialsModalLabel">API Keys y Tokens</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body">
+                <p class="text-muted small">Si un campo queda vacio (o lo limpias), se usara el valor de <strong>.env</strong> como respaldo.</p>
+
+                <div class="row g-3">
+                  {% set cred_keys = ['BOT_TOKEN', 'NEWS_API', 'X_BEARER_TOKEN', 'YOUTUBE_API_KEY', 'X_CLIENT_ID', 'X_CLIENT_SECRET_'] %}
+                  {% for key in cred_keys %}
+                  {% set meta = (credentials_meta or {}).get(key, dict()) %}
+                  <div class="col-12">
+                    <label class="form-label">{{ key }}</label>
+                    <input type="password" name="cred_{{ key.lower() }}" class="form-control" value="{{ (credentials_cfg or {}).get(key, '') }}" autocomplete="off" placeholder="Configurar en panel (opcional)">
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                      <div class="form-text mb-0">
+                        {% if meta.get('configured') %}
+                        Valor guardado en Config.
+                        {% elif meta.get('using_env') %}
+                        Sin valor en Config. Se usara .env.
+                        {% else %}
+                        No configurado en Config ni .env.
+                        {% endif %}
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="clear_cred_{{ key.lower() }}" id="clear_cred_{{ key.lower() }}" value="1">
+                        <label class="form-check-label small" for="clear_cred_{{ key.lower() }}">Limpiar valor en Config</label>
+                      </div>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="submit" class="btn btn-primary">Guardar credenciales</button>
               </div>
             </div>
           </div>

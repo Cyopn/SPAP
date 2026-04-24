@@ -311,6 +311,48 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+_CREDENTIAL_KEYS = [
+    "BOT_TOKEN",
+    "NEWS_API",
+    "X_BEARER_TOKEN",
+    "YOUTUBE_API_KEY",
+    "X_CLIENT_ID",
+    "X_CLIENT_SECRET_",
+]
+
+
+def _normalize_secret_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_bot_profile(raw: Any) -> dict[str, str]:
+    src = raw if isinstance(raw, dict) else {}
+    return {
+        "name": str(src.get("name") or "").strip(),
+        "description": str(src.get("description") or "").strip(),
+        "short_description": str(src.get("short_description") or "").strip(),
+    }
+
+
+def _extract_credentials(cfg: dict[str, Any] | None) -> tuple[dict[str, str], dict[str, dict[str, bool]]]:
+    cfg_local = cfg if isinstance(cfg, dict) else {}
+    creds_raw = cfg_local.get("credentials")
+    creds_cfg = creds_raw if isinstance(creds_raw, dict) else {}
+
+    values: dict[str, str] = {}
+    meta: dict[str, dict[str, bool]] = {}
+    for key in _CREDENTIAL_KEYS:
+        configured = _normalize_secret_text(creds_cfg.get(key))
+        env_value = _normalize_secret_text(os.environ.get(key))
+        values[key] = configured
+        meta[key] = {
+            "configured": bool(configured),
+            "using_env": (not configured) and bool(env_value),
+            "available": bool(configured or env_value),
+        }
+    return values, meta
+
+
 _WEEKDAY_ES = [
     "lunes",
     "martes",
@@ -1276,6 +1318,8 @@ def config_page():
         cfg.setdefault("limit", cfg.get("limit_per_source_monitor", 5))
         cfg.setdefault("interval_minutes", 10)
         report_cfg = _normalize_reporting_cfg(cfg.get("reporting"))
+        bot_profile = _normalize_bot_profile(cfg.get("bot_profile"))
+        credentials_cfg, credentials_meta = _extract_credentials(cfg)
         classifier_cfg = classifier.load_config() or {}
         sources = ["google", "bing", "newsapi", "youtube", "x"]
         telegram_targets = _load_telegram_targets_for_ui(cfg)
@@ -1286,6 +1330,9 @@ def config_page():
             classifier=classifier_cfg,
             telegram_targets=telegram_targets,
             report_cfg=report_cfg,
+            bot_profile=bot_profile,
+            credentials_cfg=credentials_cfg,
+            credentials_meta=credentials_meta,
         )
 
     form = request.form
@@ -1495,6 +1542,31 @@ def config_page():
     except Exception:
         pass
 
+    prev_credentials = cfg.get("credentials") if isinstance(
+        cfg.get("credentials"), dict) else {}
+    credentials_cfg: dict[str, str] = {}
+    for key in _CREDENTIAL_KEYS:
+        form_key = f"cred_{key.lower()}"
+        clear_key = f"clear_cred_{key.lower()}"
+        if _to_bool(form.get(clear_key), False):
+            continue
+        incoming = _normalize_secret_text(form.get(form_key, ""))
+        if incoming:
+            credentials_cfg[key] = incoming
+        else:
+            prev_val = _normalize_secret_text(prev_credentials.get(key))
+            if prev_val:
+                credentials_cfg[key] = prev_val
+    cfg["credentials"] = credentials_cfg
+
+    cfg["bot_profile"] = _normalize_bot_profile(
+        {
+            "name": form.get("bot_name", ""),
+            "description": form.get("bot_description", ""),
+            "short_description": form.get("bot_short_description", ""),
+        }
+    )
+
     try:
         current_reporting = _normalize_reporting_cfg(cfg.get("reporting"))
         cfg["reporting"] = _merge_reporting_cfg_from_form(
@@ -1544,12 +1616,62 @@ def api_alerts():
             row["total_reads"] = int((st or {}).get("total_reads") or 0)
             row["last_read_at"] = str((st or {}).get("last_read_at") or "")
             row["readers"] = list((st or {}).get("readers") or [])
+            row["shares_count"] = int(row.get("shares_count") or 0)
+            row["views_count"] = int(row.get("views_count") or 0)
             enriched.append(row)
 
         return jsonify(enriched)
     except Exception as e:
         log_exc("web: error in /api/alerts", e)
         return jsonify([])
+
+
+@app.route("/config/apply_bot_profile", methods=["POST"])
+def config_apply_bot_profile():
+    try:
+        cfg = storage.get_config("monitor_config") or {}
+    except Exception:
+        cfg = {}
+
+    try:
+        cfg["bot_profile"] = _normalize_bot_profile(
+            {
+                "name": request.form.get("bot_name", ""),
+                "description": request.form.get("bot_description", ""),
+                "short_description": request.form.get("bot_short_description", ""),
+            }
+        )
+        storage.set_config("monitor_config", cfg)
+    except Exception as e:
+        log_exc("web: failed saving bot profile before apply", e)
+
+    try:
+        from core import telegram as core_telegram
+
+        result = core_telegram.apply_bot_profile_from_config(cfg)
+        updated = result.get("updated_fields") or []
+        failed = result.get("failed_fields") or []
+
+        if updated:
+            flash(
+                f"Perfil aplicado en Telegram: {', '.join(updated)}.",
+                "success",
+            )
+        elif failed:
+            flash(
+                f"No se pudo aplicar el perfil del bot. Campos fallidos: {', '.join(failed)}.",
+                "danger",
+            )
+        else:
+            flash(
+                "No hay campos de perfil para aplicar (nombre/descripcion).",
+                "warning",
+            )
+    except Exception as e:
+        log_exc("web: failed to apply bot profile", e)
+        flash("Error aplicando perfil del bot.", "danger")
+
+    return redirect(url_for("config_page"))
 
 
 @app.route("/alerts")
@@ -1588,6 +1710,8 @@ def alerts_page():
             row["total_reads"] = int((st or {}).get("total_reads") or 0)
             row["last_read_at"] = str((st or {}).get("last_read_at") or "")
             row["readers"] = list((st or {}).get("readers") or [])
+            row["shares_count"] = int(row.get("shares_count") or 0)
+            row["views_count"] = int(row.get("views_count") or 0)
             alerts.append(row)
 
         return render_template("alerts.html", alerts=alerts, target=target, telegram_targets=telegram_targets)
