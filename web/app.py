@@ -316,8 +316,6 @@ _CREDENTIAL_KEYS = [
     "NEWS_API",
     "X_BEARER_TOKEN",
     "YOUTUBE_API_KEY",
-    "X_CLIENT_ID",
-    "X_CLIENT_SECRET_",
 ]
 
 
